@@ -2,24 +2,21 @@ import app from './app';
 import { config } from './config/env';
 import { autoSeedInitialData } from './services/sheetsRepo';
 
-async function startServer() {
-  try {
-    await autoSeedInitialData();
-  } catch (err) {
-    console.warn('[Startup] Auto-seed warning:', (err as any)?.message);
-  }
+// Auto-seed initial data
+autoSeedInitialData().catch(err => {
+  console.warn('[Startup] Auto-seed notice:', (err as any)?.message);
+});
 
-  const server = app.listen(config.port, () => {
+// Start standalone HTTP listener if not running in serverless mode
+if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  app.listen(config.port, () => {
     console.log(`====================================================`);
     console.log(`  MSA HR Server running at http://localhost:${config.port}`);
     console.log(`  Environment: ${config.nodeEnv}`);
     console.log(`====================================================`);
   });
-
-  return server;
 }
 
-const serverPromise = startServer();
+export default app;
 
-export default serverPromise;
 

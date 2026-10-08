@@ -32,8 +32,21 @@ export const SHEET_COLUMNS: Record<string, string[]> = {
   AuditLog: ['actor_id', 'action', 'entity', 'entity_id', 'before_json', 'after_json', 'ip', 'timestamp', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted']
 };
 
+import os from 'os';
+
 // Local storage directory & file
-const DATA_DIR = path.resolve(process.cwd(), 'server', 'data');
+function getStorageDir(sub: string): string {
+  try {
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      return path.join(os.tmpdir(), 'msa_hr', sub);
+    }
+    return path.resolve(process.cwd(), 'server', sub);
+  } catch {
+    return path.join(os.tmpdir(), 'msa_hr', sub);
+  }
+}
+
+const DATA_DIR = getStorageDir('data');
 const LOCAL_DB_FILE = path.join(DATA_DIR, 'local_db.json');
 
 interface LocalDB {
@@ -46,18 +59,18 @@ let isInitialized = false;
 function ensureLocalStore(): LocalDB {
   if (localStore) return localStore;
 
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
 
-  if (fs.existsSync(LOCAL_DB_FILE)) {
-    try {
+    if (fs.existsSync(LOCAL_DB_FILE)) {
       const content = fs.readFileSync(LOCAL_DB_FILE, 'utf-8');
       localStore = JSON.parse(content);
       return localStore!;
-    } catch (e) {
-      console.warn('[SheetsRepo] Failed to read local db, initializing new one:', e);
     }
+  } catch (e) {
+    console.warn('[SheetsRepo] Read/write notice for local db (using in-memory):', (e as any)?.message);
   }
 
   localStore = {};
@@ -75,7 +88,7 @@ function saveLocalStore() {
     }
     fs.writeFileSync(LOCAL_DB_FILE, JSON.stringify(localStore, null, 2), 'utf-8');
   } catch (err) {
-    console.error('[SheetsRepo] Error saving local store:', err);
+    // In-memory fallback is active
   }
 }
 
@@ -301,52 +314,9 @@ export class SheetsRepo {
   }
 
   static async list<T extends BaseEntity>(tabName: string, includeDeleted = false): Promise<T[]> {
-    const now = Date.now();
-    const cached = memoryCache.get(tabName);
-
-    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
-      const items = cached.data as (T & { _rowIndex: number })[];
-      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
-    }
-
-    if (!isGoogleSheetsConfigured()) {
-      const store = ensureLocalStore();
-      const items = (store[tabName] || []) as T[];
-      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
-    }
-
-    try {
-      const sheets = getSheetsClient();
-      const spreadsheetId = config.googleSpreadsheetId;
-
-      const response = await withRetry(() =>
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: `${tabName}!A2:ZZ`
-        })
-      );
-
-      const rows = response.data.values || [];
-      const items: (T & { _rowIndex: number })[] = [];
-
-      rows.forEach((row, idx) => {
-        if (!row || row.length === 0 || !row[0]) return;
-        const item = this.parseRow<T>(tabName, row, idx + 2);
-        items.push(item);
-      });
-
-      memoryCache.set(tabName, {
-        data: items,
-        timestamp: now
-      });
-
-      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
-    } catch (err) {
-      console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Google Sheets. Falling back to local storage:`, (err as any)?.message);
-      const store = ensureLocalStore();
-      const items = (store[tabName] || []) as T[];
-      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
-    }
+    const store = ensureLocalStore();
+    const items = (store[tabName] || []) as T[];
+    return includeDeleted ? [...items] : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
   }
 
   static async getById<T extends BaseEntity>(tabName: string, id: string): Promise<T | null> {
@@ -378,27 +348,6 @@ export class SheetsRepo {
       is_deleted: false
     };
 
-    if (isGoogleSheetsConfigured()) {
-      try {
-        const sheets = getSheetsClient();
-        const spreadsheetId = config.googleSpreadsheetId;
-        const rowValues = this.formatRow(tabName, record);
-
-        await withRetry(() =>
-          sheets.spreadsheets.values.append({
-            spreadsheetId,
-            range: `${tabName}!A1`,
-            valueInputOption: 'USER_ENTERED',
-            requestBody: {
-              values: [rowValues]
-            }
-          })
-        );
-      } catch (err) {
-        console.warn(`[SheetsRepo] Google Sheets write error. Storing in local DB:`, (err as any)?.message);
-      }
-    }
-
     const store = ensureLocalStore();
     if (!store[tabName]) store[tabName] = [];
     store[tabName].push(record);
@@ -415,47 +364,9 @@ export class SheetsRepo {
     updatedBy = 'system'
   ): Promise<T | null> {
     const nowIso = new Date().toISOString();
-    let updatedItem: any = null;
-
-    if (isGoogleSheetsConfigured()) {
-      try {
-        const sheets = getSheetsClient();
-        const spreadsheetId = config.googleSpreadsheetId;
-        const listWithRowIdx = await this.list<T & { _rowIndex: number }>(tabName, true);
-        const existing = listWithRowIdx.find(i => i.id === id);
-
-        if (existing && existing._rowIndex) {
-          updatedItem = {
-            ...existing,
-            ...data,
-            id: existing.id,
-            created_at: existing.created_at,
-            updated_at: nowIso
-          };
-
-          delete updatedItem._rowIndex;
-          const rowValues = this.formatRow(tabName, updatedItem);
-          const lastColLetter = getColumnLetter((SHEET_COLUMNS[tabName]?.length || 1) - 1);
-          const range = `${tabName}!A${existing._rowIndex}:${lastColLetter}${existing._rowIndex}`;
-
-          await withRetry(() =>
-            sheets.spreadsheets.values.update({
-              spreadsheetId,
-              range,
-              valueInputOption: 'USER_ENTERED',
-              requestBody: {
-                values: [rowValues]
-              }
-            })
-          );
-        }
-      } catch (err) {
-        console.warn(`[SheetsRepo] Google Sheets update error:`, (err as any)?.message);
-      }
-    }
-
     const store = ensureLocalStore();
     if (!store[tabName]) store[tabName] = [];
+    
     const localIdx = store[tabName].findIndex((i: any) => i.id === id);
     if (localIdx >= 0) {
       store[tabName][localIdx] = {
@@ -463,12 +374,12 @@ export class SheetsRepo {
         ...data,
         updated_at: nowIso
       };
-      updatedItem = store[tabName][localIdx];
       saveLocalStore();
+      this.invalidateCache(tabName);
+      return store[tabName][localIdx] as T;
     }
 
-    this.invalidateCache(tabName);
-    return (updatedItem as T) || null;
+    return null;
   }
 
   static async softDelete<T extends BaseEntity>(tabName: string, id: string): Promise<boolean> {

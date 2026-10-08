@@ -5,10 +5,23 @@ import { v4 as uuidv4 } from 'uuid';
 import { getDriveClient } from './googleAuth';
 import { config } from '../config/env';
 
+import os from 'os';
+
 // In-memory cache for folder IDs to reduce Drive API calls
 const folderCache: Map<string, string> = new Map();
 
-const UPLOADS_DIR = path.resolve(process.cwd(), 'server', 'uploads');
+function getUploadsDir(): string {
+  try {
+    if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+      return path.join(os.tmpdir(), 'msa_hr', 'uploads');
+    }
+    return path.resolve(process.cwd(), 'server', 'uploads');
+  } catch {
+    return path.join(os.tmpdir(), 'msa_hr', 'uploads');
+  }
+}
+
+const UPLOADS_DIR = getUploadsDir();
 const FILE_META_FILE = path.join(UPLOADS_DIR, 'files_meta.json');
 
 interface LocalFileMeta {
@@ -23,18 +36,22 @@ interface LocalFileMeta {
 let localFilesMap: Map<string, LocalFileMeta> = new Map();
 
 function ensureUploadsDir() {
-  if (!fs.existsSync(UPLOADS_DIR)) {
-    fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-  }
-  if (localFilesMap.size === 0 && fs.existsSync(FILE_META_FILE)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(FILE_META_FILE, 'utf-8'));
-      Object.entries(data).forEach(([k, v]) => {
-        localFilesMap.set(k, v as LocalFileMeta);
-      });
-    } catch (e) {
-      // ignore
+  try {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
     }
+    if (localFilesMap.size === 0 && fs.existsSync(FILE_META_FILE)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(FILE_META_FILE, 'utf-8'));
+        Object.entries(data).forEach(([k, v]) => {
+          localFilesMap.set(k, v as LocalFileMeta);
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+  } catch (e) {
+    // In-memory fallback
   }
 }
 
