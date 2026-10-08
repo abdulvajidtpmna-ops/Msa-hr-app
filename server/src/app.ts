@@ -36,7 +36,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.onrender.com')) {
+    if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.onrender.com') || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
       callback(null, true); // Permissive in dev, or locked to domain
