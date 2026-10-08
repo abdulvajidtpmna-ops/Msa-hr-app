@@ -56,6 +56,190 @@ interface LocalDB {
 let localStore: LocalDB | null = null;
 let isInitialized = false;
 
+function createInitialStore(): LocalDB {
+  const store: LocalDB = {};
+  for (const tab of Object.keys(SHEET_COLUMNS)) {
+    store[tab] = [];
+  }
+
+  const now = new Date().toISOString();
+
+  // 1. HR Manager
+  store.Employees.push({
+    id: 'emp_001',
+    employee_id: 'MSA-0001',
+    full_name: 'HR Administrator',
+    phone: '+919000000001',
+    email: config.seedHrManagerEmail,
+    dob: '1990-01-01',
+    gender: 'Female',
+    address: 'Kerala, India',
+    emergency_name: 'Admin Contact',
+    emergency_relation: 'Self',
+    emergency_phone: '+919000000001',
+    designation: 'HR Manager',
+    department: 'Human Resources',
+    role: 'HR Manager',
+    employment_type: 'Full-time',
+    joining_date: '2025-01-01',
+    work_location: 'Kerala Campus',
+    status: 'Active',
+    created_at: now,
+    updated_at: now,
+    created_by: 'system_seed',
+    is_deleted: false
+  });
+
+  store.Users.push({
+    id: 'user_001',
+    employee_id: 'MSA-0001',
+    email: config.seedHrManagerEmail,
+    phone: '+919000000001',
+    password_hash: '$2a$10$JgiO8iePWbh7YaxZHIACf.JjaO0LrPzmOleucXRPcXMqwkW1AVjyq', // MsaManager@2026#
+    role: 'HR Manager',
+    must_change_password: true,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    created_by: 'system_seed',
+    is_deleted: false
+  });
+
+  // 2. HR Executive
+  store.Employees.push({
+    id: 'emp_002',
+    employee_id: 'MSA-0002',
+    full_name: 'Recruitment Executive',
+    phone: '+919000000002',
+    email: config.seedHrExecEmail,
+    dob: '1993-05-15',
+    gender: 'Male',
+    address: 'Kerala, India',
+    emergency_name: 'Exec Contact',
+    emergency_relation: 'Self',
+    emergency_phone: '+919000000002',
+    designation: 'HR Executive',
+    department: 'Human Resources',
+    role: 'HR Executive',
+    employment_type: 'Full-time',
+    joining_date: '2025-02-01',
+    work_location: 'Kerala Campus',
+    status: 'Active',
+    created_at: now,
+    updated_at: now,
+    created_by: 'system_seed',
+    is_deleted: false
+  });
+
+  store.Users.push({
+    id: 'user_002',
+    employee_id: 'MSA-0002',
+    email: config.seedHrExecEmail,
+    phone: '+919000000002',
+    password_hash: '$2a$10$Rdyx.QmWrpdxv9cqGy460eAngm1rRIbPWLFq.nCodPlsdJrmFDGxS', // MsaExec@2026#
+    role: 'HR Executive',
+    must_change_password: true,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    created_by: 'system_seed',
+    is_deleted: false
+  });
+
+  // 3. Employee
+  store.Employees.push({
+    id: 'emp_003',
+    employee_id: 'MSA-0003',
+    full_name: 'Staff Member',
+    phone: '+919000000003',
+    email: config.seedEmployeeEmail,
+    dob: '1996-08-20',
+    gender: 'Female',
+    address: 'Kerala, India',
+    emergency_name: 'Staff Contact',
+    emergency_relation: 'Family',
+    emergency_phone: '+919000000003',
+    designation: 'Faculty / Trainer',
+    department: 'Academics',
+    role: 'Employee',
+    employment_type: 'Full-time',
+    joining_date: '2025-03-01',
+    work_location: 'Kerala Campus',
+    status: 'Active',
+    created_at: now,
+    updated_at: now,
+    created_by: 'system_seed',
+    is_deleted: false
+  });
+
+  store.Users.push({
+    id: 'user_003',
+    employee_id: 'MSA-0003',
+    email: config.seedEmployeeEmail,
+    phone: '+919000000003',
+    password_hash: '$2a$10$liZklLR864lyzuNNz9bMQeV90WQUWFfShrYNJp7RwH6DonhW9Ya7u', // MsaStaff@2026#
+    role: 'Employee',
+    must_change_password: true,
+    is_active: true,
+    created_at: now,
+    updated_at: now,
+    created_by: 'system_seed',
+    is_deleted: false
+  });
+
+  // Settings
+  const defaultSettings: [string, string][] = [
+    ['company_name', 'Mastered Skill Academy'],
+    ['company_address', 'Kerala, India'],
+    ['company_email', 'hr@masteredskill.com'],
+    ['company_phone', '+91 98765 43210'],
+    ['office_start_time', '09:30'],
+    ['office_end_time', '18:00'],
+    ['grace_minutes', '15'],
+    ['min_hours_present', '8'],
+    ['min_hours_half_day', '4'],
+    ['office_lat', '10.0159'],
+    ['office_lng', '76.3419'],
+    ['geofence_radius', '200'],
+    ['block_outside_geofence', 'false'],
+    ['shortlist_threshold', '60'],
+    ['offer_letter_template', 'We are pleased to offer you the position at Mastered Skill Academy. We look forward to having you on board.']
+  ];
+
+  for (const [key, value] of defaultSettings) {
+    store.Settings.push({
+      id: `set_${key}`,
+      key,
+      value,
+      created_at: now,
+      updated_at: now,
+      created_by: 'system_seed',
+      is_deleted: false
+    });
+  }
+
+  // Leave Types
+  const defaultLeaves = [
+    { name: 'Casual Leave', yearly_quota: 12, paid: true, carry_forward: false },
+    { name: 'Sick Leave', yearly_quota: 10, paid: true, carry_forward: true },
+    { name: 'Earned Leave', yearly_quota: 15, paid: true, carry_forward: true },
+    { name: 'Unpaid Leave', yearly_quota: 30, paid: false, carry_forward: false }
+  ];
+
+  for (const l of defaultLeaves) {
+    store.LeaveTypes.push({
+      id: `lt_${l.name.toLowerCase().replace(/\s+/g, '_')}`,
+      ...l,
+      created_at: now,
+      updated_at: now,
+      created_by: 'system_seed',
+      is_deleted: false
+    });
+  }
+
+  return store;
+}
+
 function ensureLocalStore(): LocalDB {
   if (localStore) return localStore;
 
@@ -66,17 +250,18 @@ function ensureLocalStore(): LocalDB {
 
     if (fs.existsSync(LOCAL_DB_FILE)) {
       const content = fs.readFileSync(LOCAL_DB_FILE, 'utf-8');
-      localStore = JSON.parse(content);
-      return localStore!;
+      const parsed = JSON.parse(content);
+      if (parsed && Array.isArray(parsed.Users) && parsed.Users.length > 0) {
+        localStore = parsed;
+        return localStore!;
+      }
     }
   } catch (e) {
-    console.warn('[SheetsRepo] Read/write notice for local db (using in-memory):', (e as any)?.message);
+    console.warn('[SheetsRepo] Read notice for local db (using in-memory):', (e as any)?.message);
   }
 
-  localStore = {};
-  for (const tab of Object.keys(SHEET_COLUMNS)) {
-    localStore[tab] = [];
-  }
+  localStore = createInitialStore();
+  saveLocalStore();
   return localStore;
 }
 
@@ -88,229 +273,17 @@ function saveLocalStore() {
     }
     fs.writeFileSync(LOCAL_DB_FILE, JSON.stringify(localStore, null, 2), 'utf-8');
   } catch (err) {
-    // In-memory fallback is active
+    // In-memory active
   }
 }
 
-/**
- * Initializes seed users, settings, and leave types if empty
- */
 export async function autoSeedInitialData() {
-  if (isInitialized) return;
-  isInitialized = true;
-
-  const users = await SheetsRepo.list<User>('Users');
-  if (users.length === 0) {
-    console.log('🌱 Seeding initial 3 user accounts...');
-    const managerPassHash = await hashPassword(config.seedHrManagerPassword);
-    const execPassHash = await hashPassword(config.seedHrExecPassword);
-    const employeePassHash = await hashPassword(config.seedEmployeePassword);
-
-    // 1. HR Manager
-    await SheetsRepo.create<Employee>('Employees', {
-      employee_id: 'MSA-0001',
-      full_name: 'HR Administrator',
-      phone: '+919000000001',
-      email: config.seedHrManagerEmail,
-      dob: '1990-01-01',
-      gender: 'Female',
-      address: 'Kerala, India',
-      emergency_name: 'Admin Contact',
-      emergency_relation: 'Self',
-      emergency_phone: '+919000000001',
-      designation: 'HR Manager',
-      department: 'Human Resources',
-      role: 'HR Manager',
-      employment_type: 'Full-time',
-      joining_date: '2025-01-01',
-      work_location: 'Kerala Campus',
-      status: 'Active'
-    }, 'system_seed');
-
-    await SheetsRepo.create<User>('Users', {
-      employee_id: 'MSA-0001',
-      email: config.seedHrManagerEmail,
-      phone: '+919000000001',
-      password_hash: managerPassHash,
-      role: 'HR Manager',
-      must_change_password: true,
-      is_active: true
-    }, 'system_seed');
-
-    // 2. HR Executive
-    await SheetsRepo.create<Employee>('Employees', {
-      employee_id: 'MSA-0002',
-      full_name: 'Recruitment Executive',
-      phone: '+919000000002',
-      email: config.seedHrExecEmail,
-      dob: '1993-05-15',
-      gender: 'Male',
-      address: 'Kerala, India',
-      emergency_name: 'Exec Contact',
-      emergency_relation: 'Self',
-      emergency_phone: '+919000000002',
-      designation: 'HR Executive',
-      department: 'Human Resources',
-      role: 'HR Executive',
-      employment_type: 'Full-time',
-      joining_date: '2025-02-01',
-      work_location: 'Kerala Campus',
-      status: 'Active'
-    }, 'system_seed');
-
-    await SheetsRepo.create<User>('Users', {
-      employee_id: 'MSA-0002',
-      email: config.seedHrExecEmail,
-      phone: '+919000000002',
-      password_hash: execPassHash,
-      role: 'HR Executive',
-      must_change_password: true,
-      is_active: true
-    }, 'system_seed');
-
-    // 3. Staff Employee
-    await SheetsRepo.create<Employee>('Employees', {
-      employee_id: 'MSA-0003',
-      full_name: 'Staff Member',
-      phone: '+919000000003',
-      email: config.seedEmployeeEmail,
-      dob: '1996-08-20',
-      gender: 'Female',
-      address: 'Kerala, India',
-      emergency_name: 'Staff Contact',
-      emergency_relation: 'Family',
-      emergency_phone: '+919000000003',
-      designation: 'Faculty / Trainer',
-      department: 'Academics',
-      role: 'Employee',
-      employment_type: 'Full-time',
-      joining_date: '2025-03-01',
-      work_location: 'Kerala Campus',
-      status: 'Active'
-    }, 'system_seed');
-
-    await SheetsRepo.create<User>('Users', {
-      employee_id: 'MSA-0003',
-      email: config.seedEmployeeEmail,
-      phone: '+919000000003',
-      password_hash: employeePassHash,
-      role: 'Employee',
-      must_change_password: true,
-      is_active: true
-    }, 'system_seed');
-
-    console.log('✅ Initial seed accounts created.');
-  }
-
-  const settings = await SheetsRepo.list<Setting>('Settings');
-  if (settings.length === 0) {
-    const defaultSettings: [string, string][] = [
-      ['company_name', 'Mastered Skill Academy'],
-      ['company_address', 'Kerala, India'],
-      ['company_email', 'hr@masteredskill.com'],
-      ['company_phone', '+91 98765 43210'],
-      ['office_start_time', '09:30'],
-      ['office_end_time', '18:00'],
-      ['grace_minutes', '15'],
-      ['min_hours_present', '8'],
-      ['min_hours_half_day', '4'],
-      ['office_lat', '10.0159'],
-      ['office_lng', '76.3419'],
-      ['geofence_radius', '200'],
-      ['block_outside_geofence', 'false'],
-      ['shortlist_threshold', '60'],
-      ['offer_letter_template', 'We are pleased to offer you the position at Mastered Skill Academy. We look forward to having you on board.']
-    ];
-
-    for (const [key, value] of defaultSettings) {
-      await SheetsRepo.create<Setting>('Settings', { key, value }, 'system_seed');
-    }
-  }
-
-  const leaveTypes = await SheetsRepo.list<LeaveType>('LeaveTypes');
-  if (leaveTypes.length === 0) {
-    const defaultLeaves = [
-      { name: 'Casual Leave', yearly_quota: 12, paid: true, carry_forward: false },
-      { name: 'Sick Leave', yearly_quota: 10, paid: true, carry_forward: true },
-      { name: 'Earned Leave', yearly_quota: 15, paid: true, carry_forward: true },
-      { name: 'Unpaid Leave', yearly_quota: 30, paid: false, carry_forward: false }
-    ];
-
-    for (const l of defaultLeaves) {
-      await SheetsRepo.create<LeaveType>('LeaveTypes', l, 'system_seed');
-    }
-  }
-}
-
-interface CacheEntry<T> {
-  data: T[];
-  timestamp: number;
-}
-
-const memoryCache: Map<string, CacheEntry<any>> = new Map();
-const CACHE_TTL_MS = 30 * 1000;
-
-function isGoogleSheetsConfigured(): boolean {
-  return !!(config.googleSpreadsheetId && config.googleServiceAccountEmail && config.googlePrivateKey);
-}
-
-async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 500): Promise<T> {
-  try {
-    return await fn();
-  } catch (err: any) {
-    const status = err?.status || err?.response?.status;
-    const isRetryable = status === 429 || (status >= 500 && status < 600) || err?.code === 'ETIMEDOUT';
-
-    if (retries > 0 && isRetryable) {
-      console.warn(`[Sheets API] Rate limit/error (${status || err?.message}). Retrying in ${delayMs}ms...`);
-      await new Promise(res => setTimeout(res, delayMs));
-      return withRetry(fn, retries - 1, delayMs * 2);
-    }
-    throw err;
-  }
-}
-
-function getColumnLetter(colIndex: number): string {
-  let letter = '';
-  while (colIndex >= 0) {
-    letter = String.fromCharCode((colIndex % 26) + 65) + letter;
-    colIndex = Math.floor(colIndex / 26) - 1;
-  }
-  return letter;
+  ensureLocalStore();
 }
 
 export class SheetsRepo {
-  private static invalidateCache(tabName: string) {
-    memoryCache.delete(tabName);
-  }
-
-  private static parseRow<T>(tabName: string, rowValues: any[], rowIndex: number): T & { _rowIndex: number } {
-    const columns = SHEET_COLUMNS[tabName] || [];
-    const item: any = { _rowIndex: rowIndex };
-
-    columns.forEach((col, idx) => {
-      let val = rowValues[idx];
-      if (val === undefined || val === null) {
-        val = '';
-      }
-      if (val === 'TRUE' || val === 'true') val = true;
-      else if (val === 'FALSE' || val === 'false') val = false;
-
-      item[col] = val;
-    });
-
-    return item as T & { _rowIndex: number };
-  }
-
-  private static formatRow(tabName: string, item: any): any[] {
-    const columns = SHEET_COLUMNS[tabName] || [];
-    return columns.map(col => {
-      let val = item[col];
-      if (val === undefined || val === null) return '';
-      if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
-      if (typeof val === 'object') return JSON.stringify(val);
-      return String(val);
-    });
+  private static invalidateCache(_tabName: string) {
+    // Local in-memory sync
   }
 
   static async list<T extends BaseEntity>(tabName: string, includeDeleted = false): Promise<T[]> {
