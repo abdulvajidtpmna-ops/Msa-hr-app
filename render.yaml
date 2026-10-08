@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: msa-hr-app
+    env: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_SPREADSHEET_ID
+        sync: false
+      - key: GOOGLE_DRIVE_FOLDER_ID
+        sync: false
+      - key: SEED_HR_MANAGER_EMAIL
+        value: hrmanager@masteredskill.com
+      - key: SEED_HR_MANAGER_PASSWORD
+        sync: false
+      - key: SEED_HR_EXEC_EMAIL
+        value: hrexec@masteredskill.com
+      - key: SEED_HR_EXEC_PASSWORD
+        sync: false
+      - key: SEED_EMPLOYEE_EMAIL
+        value: employee@masteredskill.com
+      - key: SEED_EMPLOYEE_PASSWORD
+        sync: false
