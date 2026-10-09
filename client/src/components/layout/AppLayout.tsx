@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PwaInstallBanner } from '../common/PwaInstallBanner';
-import { PasswordChangeModal } from '../common/PasswordChangeModal';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
@@ -52,9 +51,6 @@ export const AppLayout: React.FC = () => {
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col pb-20 md:pb-0">
       {/* PWA Install Banner */}
       <PwaInstallBanner />
-
-      {/* Force Change Password Modal */}
-      <PasswordChangeModal />
 
       {/* Header */}
       <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-100 shadow-sm">

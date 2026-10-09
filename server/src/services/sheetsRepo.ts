@@ -97,7 +97,7 @@ function createInitialStore(): LocalDB {
     phone: '+919000000001',
     password_hash: '$2a$10$JgiO8iePWbh7YaxZHIACf.JjaO0LrPzmOleucXRPcXMqwkW1AVjyq', // MsaManager@2026#
     role: 'HR Manager',
-    must_change_password: true,
+    must_change_password: false,
     is_active: true,
     created_at: now,
     updated_at: now,
@@ -138,7 +138,7 @@ function createInitialStore(): LocalDB {
     phone: '+919000000002',
     password_hash: '$2a$10$Rdyx.QmWrpdxv9cqGy460eAngm1rRIbPWLFq.nCodPlsdJrmFDGxS', // MsaExec@2026#
     role: 'HR Executive',
-    must_change_password: true,
+    must_change_password: false,
     is_active: true,
     created_at: now,
     updated_at: now,
@@ -179,7 +179,7 @@ function createInitialStore(): LocalDB {
     phone: '+919000000003',
     password_hash: '$2a$10$liZklLR864lyzuNNz9bMQeV90WQUWFfShrYNJp7RwH6DonhW9Ya7u', // MsaStaff@2026#
     role: 'Employee',
-    must_change_password: true,
+    must_change_password: false,
     is_active: true,
     created_at: now,
     updated_at: now,

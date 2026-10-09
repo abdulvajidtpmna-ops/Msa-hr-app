@@ -61,7 +61,7 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
     const employees = await SheetsRepo.list<Employee>('Employees');
     const employee = employees.find(e => e.employee_id === user.employee_id);
 
-    const mustChangePassword = user.must_change_password === true || user.must_change_password === 'TRUE' || user.must_change_password === 'true';
+    const mustChangePassword = false;
 
     const token = signToken({
       userId: user.id,
@@ -117,7 +117,7 @@ router.get('/me', authenticate, async (req: Request, res: Response) => {
     const employees = await SheetsRepo.list<Employee>('Employees');
     const employee = employees.find(e => e.employee_id === user.employee_id);
 
-    const mustChangePassword = user.must_change_password === true || user.must_change_password === 'TRUE' || user.must_change_password === 'true';
+    const mustChangePassword = false;
 
     return res.json({
       success: true,
