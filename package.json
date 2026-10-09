@@ -11,10 +11,10 @@
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "build:client": "npm --prefix client run build",
+    "build:client": "npm --prefix client run build && node -e \"const fs=require('fs'); fs.cpSync('client/dist', 'dist', {recursive: true, force: true});\"",
     "build:server": "npm --prefix server run build",
     "build": "npm run build:client && npm run build:server",
-    "start": "npm --prefix server run start",
+    "start": "node server/dist/index.js",
     "setup": "npm --prefix server run setup",
     "test": "npm --prefix server run test"
   },
