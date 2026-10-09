@@ -71,13 +71,36 @@ app.get('/api/health', (req: Request, res: Response) => {
   });
 });
 
+import fs from 'fs';
+
 // Serve frontend build in production
-const clientDistPath = path.resolve(__dirname, '../../client/dist');
+const candidatePaths = [
+  path.resolve(__dirname, '../../client/dist'),
+  path.resolve(__dirname, '../client/dist'),
+  path.resolve(__dirname, '../public'),
+  path.resolve(__dirname, './public'),
+  path.resolve(process.cwd(), 'client/dist'),
+  path.resolve(process.cwd(), 'server/public'),
+  path.resolve(process.cwd(), 'dist')
+];
+
+let clientDistPath = candidatePaths[0];
+for (const p of candidatePaths) {
+  if (fs.existsSync(path.join(p, 'index.html'))) {
+    clientDistPath = p;
+    break;
+  }
+}
+
 app.use(express.static(clientDistPath));
 
 app.get('*', (req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith('/api')) {
     return next();
+  }
+  const indexPath = path.join(clientDistPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
   }
   res.sendFile(path.join(clientDistPath, 'index.html'), (err) => {
     if (err) {

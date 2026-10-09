@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
+    "postbuild": "node -e \"const fs=require('fs'); if(fs.existsSync('../client/dist')){fs.cpSync('../client/dist', 'public', {recursive: true, force: true}); fs.cpSync('../client/dist', 'dist/public', {recursive: true, force: true});}\"",
     "start": "node dist/index.js",
     "setup": "tsx src/setup.ts",
     "test": "jest"
