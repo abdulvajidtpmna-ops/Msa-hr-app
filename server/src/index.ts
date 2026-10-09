@@ -7,11 +7,12 @@ autoSeedInitialData().catch(err => {
   console.warn('[Startup] Auto-seed notice:', (err as any)?.message);
 });
 
-// Start standalone HTTP listener if not running in serverless mode
-if (!process.env.VERCEL && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+// Start HTTP listener if run directly or as a service
+const isDirectRun = require.main === module || (!process.env.AWS_LAMBDA_FUNCTION_NAME && !process.env.VERCEL_LAMBDA);
+if (isDirectRun || process.env.PORT) {
   app.listen(config.port, () => {
     console.log(`====================================================`);
-    console.log(`  MSA HR Server running at http://localhost:${config.port}`);
+    console.log(`  MSA HR Server running at http://0.0.0.0:${config.port}`);
     console.log(`  Environment: ${config.nodeEnv}`);
     console.log(`====================================================`);
   });
