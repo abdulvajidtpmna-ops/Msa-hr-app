@@ -40,8 +40,8 @@ export const AppLayout: React.FC = () => {
     { label: 'Attendance', path: '/attendance', icon: Clock, show: true },
     { label: 'Daily Tasks', path: '/tasks', icon: CheckSquare, show: true },
     { label: 'Leave & Offs', path: '/leave', icon: Calendar, show: true },
-    { label: 'Recruitment', path: '/recruitment', icon: Briefcase, show: isHR },
-    { label: 'Candidate Pipeline', path: '/recruitment/applications', icon: UserCheck, show: isHR },
+    { label: 'Recruitment', path: '/recruitment', icon: Briefcase, show: true },
+    { label: 'Candidate Pipeline', path: '/recruitment/applications', icon: UserCheck, show: true },
     { label: 'Staff Directory', path: '/employees', icon: Users, show: isHR },
     { label: 'Payroll & Slips', path: '/payroll', icon: DollarSign, show: true },
     { label: 'Reports', path: '/reports', icon: BarChart3, show: isHR },
@@ -271,15 +271,15 @@ export const AppLayout: React.FC = () => {
         </NavLink>
 
         <NavLink
-          to={isHR ? '/recruitment' : '/leave'}
+          to="/recruitment/applications"
           className={({ isActive }) =>
             `flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition ${
               isActive ? 'text-brand-700 font-bold' : 'text-slate-500'
             }`
           }
         >
-          {isHR ? <Briefcase className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
-          <span className="text-[10px]">{isHR ? 'Hiring' : 'Leave'}</span>
+          <UserCheck className="w-5 h-5" />
+          <span className="text-[10px]">Pipeline</span>
         </NavLink>
 
         <button

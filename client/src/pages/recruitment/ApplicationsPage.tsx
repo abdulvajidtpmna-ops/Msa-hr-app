@@ -519,6 +519,34 @@ export const ApplicationsPage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* Quick CV Action Banner */}
+      <div className="bg-gradient-to-r from-emerald-600 via-teal-600 to-brand-700 text-white p-4 sm:p-5 rounded-3xl shadow-md flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shrink-0">
+            <Upload className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h3 className="font-black text-sm sm:text-base flex items-center gap-2">
+              Direct Resume / CV Upload <Sparkles className="w-4 h-4 text-emerald-200" />
+            </h3>
+            <p className="text-xs text-emerald-100">
+              Instantly create a candidate by dropping their CV (PDF/Word/TXT) without manual form filling
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            resetDirectResumeForm();
+            setShowDirectResumeModal(true);
+          }}
+          className="px-5 py-2.5 bg-white text-emerald-900 hover:bg-emerald-50 rounded-2xl text-xs font-black shadow-md transition active:scale-95 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" /> Upload CV Directly
+        </button>
+      </div>
+
       {/* Header & Auto Shortlist Action */}
       <div className="flex flex-wrap items-center justify-between gap-4 bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
         <div>

@@ -14,7 +14,8 @@ import {
   UserCheck,
   UserX,
   FileCheck2,
-  Sparkles
+  Sparkles,
+  Upload
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -93,6 +94,12 @@ export const DashboardPage: React.FC = () => {
             {todayAttendance?.in_time ? (todayAttendance?.out_time ? 'Attendance Completed' : 'Punch OUT') : 'Punch IN (Selfie)'}
           </Link>
           <Link
+            to="/recruitment/applications?action=upload-resume"
+            className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl text-xs font-black shadow-lg transition active:scale-95"
+          >
+            <Upload className="w-4 h-4 text-white" /> Direct CV Upload
+          </Link>
+          <Link
             to="/tasks"
             className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-3 bg-brand-950/40 hover:bg-brand-950/60 text-white rounded-2xl text-xs font-bold transition"
           >
@@ -130,12 +137,12 @@ export const DashboardPage: React.FC = () => {
               <p className="text-xs font-semibold text-slate-500 mt-0.5">Open Job Openings</p>
             </Link>
 
-            <Link to="/recruitment" className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-sm hover:border-brand-300 transition">
+            <Link to="/recruitment/applications" className="bg-white p-4 sm:p-5 rounded-3xl border border-slate-100 shadow-sm hover:border-brand-300 transition">
               <div className="w-10 h-10 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
                 <Sparkles className="w-5 h-5" />
               </div>
               <p className="text-2xl font-black text-slate-900">{hrStats.newApplications}</p>
-              <p className="text-xs font-semibold text-slate-500 mt-0.5">New Candidates</p>
+              <p className="text-xs font-semibold text-slate-500 mt-0.5">Candidate Pipeline</p>
             </Link>
           </div>
         </div>
