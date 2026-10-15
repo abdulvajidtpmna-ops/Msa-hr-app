@@ -338,10 +338,19 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 500): P
     return await fn();
   } catch (err: any) {
     const status = err?.status || err?.response?.status;
-    const isRetryable = status === 429 || (status >= 500 && status < 600) || err?.code === 'ETIMEDOUT';
+    const msg = String(err?.message || '');
+    const isRetryable =
+      status === 429 ||
+      status === 404 ||
+      (status >= 500 && status < 600) ||
+      err?.code === 'ETIMEDOUT' ||
+      msg.includes('404') ||
+      msg.includes('429') ||
+      msg.includes('502') ||
+      msg.includes('503');
 
     if (retries > 0 && isRetryable) {
-      console.warn(`[Sheets API] Rate limit/error (${status || err?.message}). Retrying in ${delayMs}ms...`);
+      console.warn(`[Sheets API] Transient error (${status || err?.message}). Retrying in ${delayMs}ms...`);
       await new Promise(res => setTimeout(res, delayMs));
       return withRetry(fn, retries - 1, delayMs * 2);
     }

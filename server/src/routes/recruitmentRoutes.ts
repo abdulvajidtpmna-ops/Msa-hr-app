@@ -306,11 +306,11 @@ export async function autoAddJoinedCandidateToEmployees(
 
   const job = jobs.find(j => j.id === app.job_id);
 
-  const cleanEmail = (app.email || '').toLowerCase().trim();
-  const cleanPhone = (app.phone || '').trim();
+  const cleanEmail = String(app.email || '').toLowerCase().trim();
+  const cleanPhone = String(app.phone || '').trim();
   const existingEmp = employees.find(e => 
-    (cleanEmail && e.email && e.email.toLowerCase().trim() === cleanEmail) ||
-    (cleanPhone && e.phone && e.phone.trim() === cleanPhone)
+    (cleanEmail && e.email && String(e.email).toLowerCase().trim() === cleanEmail) ||
+    (cleanPhone && e.phone && String(e.phone).trim() === cleanPhone)
   );
 
   if (existingEmp) {
@@ -378,7 +378,7 @@ export async function autoAddJoinedCandidateToEmployees(
 
   const existingUsers = await SheetsRepo.list<User>('Users');
   const userExists = existingUsers.some(u => 
-    (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+    (cleanEmail && u.email && String(u.email).toLowerCase().trim() === cleanEmail) ||
     (u.employee_id === newEmpId)
   );
 

@@ -18,7 +18,7 @@ export const config = {
   googleDriveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
   
   // Google Apps Script Web App Connector (Zero-GCP Setup)
-  appsScriptUrl: process.env.GOOGLE_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL || '',
+  appsScriptUrl: process.env.GOOGLE_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL || 'https://script.google.com/macros/s/AKfycbzUrEzvvlCjDDHTJJH94zRGWpqX525ekwMS3LeM5QiECO5rRVlkQJu7VGj1vivffSz_/exec',
   appsScriptSecret: process.env.APPS_SCRIPT_SECRET || '',
   
   // Seed User Passwords
