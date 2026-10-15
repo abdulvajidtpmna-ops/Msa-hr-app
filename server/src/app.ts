@@ -92,13 +92,30 @@ for (const p of candidatePaths) {
   }
 }
 
-app.use(express.static(clientDistPath));
+app.use(express.static(clientDistPath, {
+  setHeaders: (res, filePath) => {
+    if (
+      filePath.endsWith('sw.js') ||
+      filePath.endsWith('index.html') ||
+      filePath.endsWith('registerSW.js') ||
+      filePath.endsWith('manifest.webmanifest') ||
+      filePath.endsWith('.html')
+    ) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
+  }
+}));
 
 app.get('*', (req: Request, res: Response, next: NextFunction) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
   const indexPath = path.join(clientDistPath, 'index.html');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate, max-age=0');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
   if (fs.existsSync(indexPath)) {
     return res.sendFile(indexPath);
   }

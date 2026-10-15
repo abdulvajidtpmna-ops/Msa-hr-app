@@ -16,7 +16,8 @@ import {
   X,
   User as UserIcon,
   ShieldCheck,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PwaInstallBanner } from '../common/PwaInstallBanner';
@@ -33,6 +34,24 @@ export const AppLayout: React.FC = () => {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const handleForceRefresh = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.unregister();
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        for (const k of keys) {
+          await caches.delete(k);
+        }
+      }
+    } catch (e) {}
+    window.location.reload();
   };
 
   const navItems = [
@@ -100,6 +119,15 @@ export const AppLayout: React.FC = () => {
                 user?.name?.charAt(0) || 'U'
               )}
             </NavLink>
+
+            <button
+              type="button"
+              onClick={handleForceRefresh}
+              title="Force Refresh / Update App"
+              className="p-2 text-slate-500 hover:text-brand-700 hover:bg-slate-100 rounded-xl transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
 
             <button
               type="button"
@@ -213,7 +241,14 @@ export const AppLayout: React.FC = () => {
                   })}
               </nav>
 
-              <div className="pt-4 border-t border-slate-100">
+              <div className="pt-4 border-t border-slate-100 space-y-2">
+                <button
+                  type="button"
+                  onClick={handleForceRefresh}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl transition"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Check Updates & Clear Cache
+                </button>
                 <button
                   type="button"
                   onClick={handleLogout}
