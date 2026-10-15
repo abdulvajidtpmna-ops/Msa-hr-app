@@ -14,6 +14,20 @@ export interface ParsedResumeData {
   raw_text_preview?: string;
 }
 
+function escapeRegex(str: string): string {
+  return str.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+function containsWordOrSymbol(haystack: string, term: string): boolean {
+  try {
+    const escaped = escapeRegex(term);
+    const regex = new RegExp(`(?:^|[^a-zA-Z0-9])${escaped}(?=[^a-zA-Z0-9]|$)`, 'i');
+    return regex.test(haystack);
+  } catch {
+    return haystack.toLowerCase().includes(term.toLowerCase());
+  }
+}
+
 /**
  * Extracts printable text from a binary buffer (PDF, DOCX, TXT, etc.)
  */
@@ -115,8 +129,7 @@ export function parseResume(buffer: Buffer, originalFileName: string = ''): Pars
 
   let designation = '';
   for (const des of designationsList) {
-    const regex = new RegExp(`\\b${des}\\b`, 'i');
-    if (regex.test(text) || regex.test(originalFileName)) {
+    if (containsWordOrSymbol(text, des) || containsWordOrSymbol(originalFileName, des)) {
       designation = des;
       break;
     }
@@ -188,8 +201,7 @@ export function parseResume(buffer: Buffer, originalFileName: string = ''): Pars
   let specialization = '';
 
   for (const q of qualList) {
-    const qRegex = new RegExp(`\\b${q.replace('.', '\\.')}\\b`, 'i');
-    if (qRegex.test(text)) {
+    if (containsWordOrSymbol(text, q)) {
       qualification = q;
       break;
     }
@@ -219,8 +231,7 @@ export function parseResume(buffer: Buffer, originalFileName: string = ''): Pars
 
   const matchedSkills: string[] = [];
   for (const sk of commonSkills) {
-    const r = new RegExp(`\\b${sk.replace('.', '\\.')}\\b`, 'i');
-    if (r.test(text)) {
+    if (containsWordOrSymbol(text, sk)) {
       matchedSkills.push(sk);
     }
   }
