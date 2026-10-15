@@ -178,6 +178,12 @@ export const ApplicationsPage: React.FC = () => {
     fetchApplications();
   }, [selectedJobId]);
 
+  useEffect(() => {
+    if (searchParams.get('action') === 'upload-resume') {
+      setShowDirectResumeModal(true);
+    }
+  }, [searchParams]);
+
   const loadApplicationDetails = async (id: string) => {
     setActiveAppId(id);
     setIsLoadingDetails(true);
