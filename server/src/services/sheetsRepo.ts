@@ -294,6 +294,45 @@ export function isGoogleSheetsConfigured(): boolean {
   );
 }
 
+export function isAppsScriptConfigured(): boolean {
+  return !!(config.appsScriptUrl && config.appsScriptUrl.startsWith('http'));
+}
+
+export async function fetchFromAppsScript(action: string, payload: any = {}): Promise<any> {
+  if (!isAppsScriptConfigured()) {
+    throw new Error('Google Apps Script URL is not configured.');
+  }
+
+  const bodyData: any = {
+    action,
+    ...payload
+  };
+  if (config.appsScriptSecret) {
+    bodyData.secret = config.appsScriptSecret;
+  }
+
+  return withRetry(async () => {
+    const res = await fetch(config.appsScriptUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(bodyData),
+      redirect: 'follow'
+    });
+
+    if (!res.ok) {
+      throw new Error(`Apps Script HTTP ${res.status}`);
+    }
+
+    const json: any = await res.json();
+    if (json && json.success === false && json.error) {
+      throw new Error(`Apps Script Error: ${json.error}`);
+    }
+    return json.data !== undefined ? json.data : json;
+  }, 2, 800);
+}
+
 async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 500): Promise<T> {
   try {
     return await fn();
@@ -321,6 +360,18 @@ function getColumnLetter(colIndex: number): string {
 
 export async function autoSeedInitialData() {
   ensureLocalStore();
+  if (isAppsScriptConfigured()) {
+    try {
+      const users = await SheetsRepo.list<User>('Users');
+      if (users.length === 0) {
+        console.log('[SheetsRepo] Initializing Google Sheets tabs via Apps Script setup...');
+        await fetchFromAppsScript('setup', {});
+      }
+    } catch (e) {
+      console.warn('[SheetsRepo] Apps Script autoSeed notice:', (e as any)?.message);
+    }
+    return;
+  }
   if (!isGoogleSheetsConfigured()) return;
 
   try {
@@ -472,6 +523,34 @@ export class SheetsRepo {
       return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
     }
 
+    if (isAppsScriptConfigured()) {
+      try {
+        const rows = await fetchFromAppsScript('list', { tabName });
+        if (Array.isArray(rows)) {
+          const items: (T & { _rowIndex: number })[] = rows.map((r, idx) => ({
+            ...r,
+            _rowIndex: r._rowIndex || idx + 2
+          }));
+
+          memoryCache.set(tabName, {
+            data: items,
+            timestamp: now
+          });
+
+          const store = ensureLocalStore();
+          store[tabName] = items;
+          saveLocalStore();
+
+          return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+        }
+      } catch (err) {
+        console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Apps Script. Using backup:`, (err as any)?.message);
+        const store = ensureLocalStore();
+        const items = (store[tabName] || []) as T[];
+        return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+      }
+    }
+
     if (!isGoogleSheetsConfigured()) {
       const store = ensureLocalStore();
       const items = (store[tabName] || []) as T[];
@@ -546,7 +625,13 @@ export class SheetsRepo {
       is_deleted: false
     };
 
-    if (isGoogleSheetsConfigured()) {
+    if (isAppsScriptConfigured()) {
+      try {
+        await fetchFromAppsScript('create', { tabName, data: record });
+      } catch (err) {
+        console.warn(`[SheetsRepo] Apps Script write error for ${tabName}:`, (err as any)?.message);
+      }
+    } else if (isGoogleSheetsConfigured()) {
       try {
         const sheets = getSheetsClient();
         const spreadsheetId = config.googleSpreadsheetId;
@@ -585,7 +670,13 @@ export class SheetsRepo {
     const nowIso = new Date().toISOString();
     let updatedItem: any = null;
 
-    if (isGoogleSheetsConfigured()) {
+    if (isAppsScriptConfigured()) {
+      try {
+        await fetchFromAppsScript('update', { tabName, id, data });
+      } catch (err) {
+        console.warn(`[SheetsRepo] Apps Script update error for ${tabName}:`, (err as any)?.message);
+      }
+    } else if (isGoogleSheetsConfigured()) {
       try {
         const sheets = getSheetsClient();
         const spreadsheetId = config.googleSpreadsheetId;
@@ -640,12 +731,37 @@ export class SheetsRepo {
   }
 
   static async softDelete<T extends BaseEntity>(tabName: string, id: string): Promise<boolean> {
+    if (isAppsScriptConfigured()) {
+      try {
+        await fetchFromAppsScript('delete', { tabName, id });
+      } catch (err) {
+        console.warn(`[SheetsRepo] Apps Script delete error for ${tabName}:`, (err as any)?.message);
+      }
+    }
     const updated = await this.update<T>(tabName, id, { is_deleted: true } as any);
     return !!updated;
   }
 
   static async batchGetTabs(tabNames: string[]): Promise<Record<string, any[]>> {
     const result: Record<string, any[]> = {};
+
+    if (isAppsScriptConfigured()) {
+      try {
+        const batch = await fetchFromAppsScript('batchGet', { tabNames });
+        if (batch && typeof batch === 'object') {
+          for (const tab of tabNames) {
+            if (Array.isArray(batch[tab])) {
+              memoryCache.set(tab, { data: batch[tab], timestamp: Date.now() });
+              result[tab] = batch[tab];
+            }
+          }
+          return result;
+        }
+      } catch (err) {
+        console.warn('[SheetsRepo] Apps Script batchGet error:', (err as any)?.message);
+      }
+    }
+
     for (const tab of tabNames) {
       result[tab] = await this.list(tab);
     }

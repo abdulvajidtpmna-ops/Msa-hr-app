@@ -11,11 +11,15 @@ export const config = {
   encryptionKey: process.env.ENCRYPTION_KEY || '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef', // 32-byte hex
   appUrl: process.env.APP_URL || 'http://localhost:3000',
   
-  // Google Sheets & Drive credentials
+  // Google Sheets & Drive credentials (Direct Service Account)
   googleServiceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '',
   googlePrivateKey: (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
   googleSpreadsheetId: process.env.GOOGLE_SPREADSHEET_ID || '',
   googleDriveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || '',
+  
+  // Google Apps Script Web App Connector (Zero-GCP Setup)
+  appsScriptUrl: process.env.GOOGLE_APPS_SCRIPT_URL || process.env.APPS_SCRIPT_URL || '',
+  appsScriptSecret: process.env.APPS_SCRIPT_SECRET || '',
   
   // Seed User Passwords
   seedHrManagerEmail: process.env.SEED_HR_MANAGER_EMAIL || 'hrmanager@masteredskill.com',

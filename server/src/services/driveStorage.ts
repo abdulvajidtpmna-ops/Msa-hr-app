@@ -4,6 +4,7 @@ import { Readable } from 'stream';
 import { v4 as uuidv4 } from 'uuid';
 import { getDriveClient } from './googleAuth';
 import { config } from '../config/env';
+import { fetchFromAppsScript, isAppsScriptConfigured } from './sheetsRepo';
 
 import os from 'os';
 
@@ -144,6 +145,37 @@ export class DriveStorage {
     bufferOrStream: Buffer | Readable,
     targetFolderId: string
   ): Promise<{ fileId: string; webViewLink?: string }> {
+    if (isAppsScriptConfigured()) {
+      try {
+        let buffer: Buffer;
+        if (Buffer.isBuffer(bufferOrStream)) {
+          buffer = bufferOrStream;
+        } else {
+          const chunks: Buffer[] = [];
+          for await (const chunk of bufferOrStream) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          buffer = Buffer.concat(chunks);
+        }
+
+        const res = await fetchFromAppsScript('uploadFile', {
+          fileName,
+          mimeType,
+          base64: buffer.toString('base64'),
+          folderName: targetFolderId.startsWith('local_') ? 'Recruitment' : targetFolderId
+        });
+
+        if (res && res.fileId) {
+          return {
+            fileId: res.fileId,
+            webViewLink: res.webViewLink || `https://drive.google.com/file/d/${res.fileId}/view`
+          };
+        }
+      } catch (err) {
+        console.warn(`[DriveStorage] Apps Script upload error:`, (err as any)?.message);
+      }
+    }
+
     if (isGoogleDriveConfigured()) {
       try {
         const drive = getDriveClient();
