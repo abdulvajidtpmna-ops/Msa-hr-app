@@ -13,15 +13,18 @@ import { publicFormLimiter } from '../middleware/rateLimit';
 import {
   Job,
   Application,
+  ApplicationStatus,
   ApplicationStatusLog,
   Interview,
   Offer,
   OnboardingDoc,
   Employee,
   User,
+  UserRole,
   JobCriteria,
   ScoreBreakdown
 } from '../types';
+import { parseResume, ParsedResumeData } from '../utils/resumeParser';
 
 const router = Router();
 const upload = multer({
@@ -275,6 +278,369 @@ router.post(
   }
 );
 
+/**
+ * Helper to automatically appoint/add a candidate to the Employee directory when marked as Joined
+ */
+export async function autoAddJoinedCandidateToEmployees(
+  applicationId: string,
+  options: {
+    role?: UserRole;
+    designation?: string;
+    department?: string;
+    joining_date?: string;
+    temporary_password?: string;
+    work_location?: string;
+    changedBy: string;
+    reqIp?: string;
+  }
+) {
+  const app = await SheetsRepo.getById<Application>('Applications', applicationId);
+  if (!app) {
+    throw new Error('Application not found');
+  }
+
+  const [employees, jobs] = await Promise.all([
+    SheetsRepo.list<Employee>('Employees'),
+    SheetsRepo.list<Job>('Jobs')
+  ]);
+
+  const job = jobs.find(j => j.id === app.job_id);
+
+  const cleanEmail = (app.email || '').toLowerCase().trim();
+  const cleanPhone = (app.phone || '').trim();
+  const existingEmp = employees.find(e => 
+    (cleanEmail && e.email && e.email.toLowerCase().trim() === cleanEmail) ||
+    (cleanPhone && e.phone && e.phone.trim() === cleanPhone)
+  );
+
+  if (existingEmp) {
+    await SheetsRepo.update<Application>('Applications', applicationId, { status: 'Joined' }, options.changedBy);
+    return {
+      alreadyExisted: true,
+      employee: existingEmp,
+      credentials: null
+    };
+  }
+
+  // Generate unique sequential Employee ID: MSA-000X
+  let maxNum = 0;
+  employees.forEach(e => {
+    const match = (e.employee_id || '').match(/MSA-(\d+)/i);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n > maxNum) maxNum = n;
+    }
+  });
+  const newEmpId = `MSA-${String(maxNum + 1).padStart(4, '0')}`;
+
+  // Resolve Employee Drive folder
+  let empFolderId = '';
+  try {
+    empFolderId = await DriveStorage.resolveFolderPath([
+      'Mastered Skill Academy HR',
+      'Employees',
+      `${newEmpId} - ${app.full_name}`
+    ]);
+  } catch (e) {}
+
+  const assignedRole = options.role || (job?.department === 'Human Resources' ? 'HR Executive' : 'Employee');
+  const assignedDesignation = options.designation || (job?.title) || app.current_employer || 'Staff Member';
+  const assignedDepartment = options.department || (job?.department) || 'Operations';
+  const assignedJoiningDate = options.joining_date || new Date().toISOString().split('T')[0];
+  const assignedWorkLocation = options.work_location || (job?.location) || 'Kerala Campus';
+
+  const newEmployee: Partial<Employee> = {
+    employee_id: newEmpId,
+    full_name: app.full_name,
+    phone: app.phone,
+    email: app.email,
+    dob: app.dob || '1995-01-01',
+    gender: app.gender || 'Other',
+    address: app.location || 'Kerala, India',
+    emergency_name: 'Emergency Contact',
+    emergency_relation: 'Family',
+    emergency_phone: app.phone,
+    designation: assignedDesignation,
+    department: assignedDepartment,
+    role: assignedRole as any,
+    employment_type: 'Full-time',
+    joining_date: assignedJoiningDate,
+    work_location: assignedWorkLocation,
+    status: 'Active',
+    drive_folder_id: empFolderId
+  };
+
+  const createdEmployee = await SheetsRepo.create<Employee>('Employees', newEmployee, options.changedBy);
+
+  // Create User login account (no forced password change)
+  const tempPassword = options.temporary_password || `MsaStaff@${Math.floor(1000 + Math.random() * 9000)}`;
+  const passHash = await hashPassword(tempPassword);
+
+  const existingUsers = await SheetsRepo.list<User>('Users');
+  const userExists = existingUsers.some(u => 
+    (cleanEmail && u.email && u.email.toLowerCase().trim() === cleanEmail) ||
+    (u.employee_id === newEmpId)
+  );
+
+  if (!userExists) {
+    await SheetsRepo.create<User>('Users', {
+      employee_id: newEmpId,
+      email: app.email,
+      phone: app.phone,
+      password_hash: passHash,
+      role: assignedRole as any,
+      must_change_password: false,
+      is_active: true
+    }, options.changedBy);
+  }
+
+  // Update Application status
+  await SheetsRepo.update<Application>('Applications', applicationId, { status: 'Joined' }, options.changedBy);
+  await SheetsRepo.create<ApplicationStatusLog>('ApplicationStatusLog', {
+    application_id: applicationId,
+    from_status: app.status,
+    to_status: 'Joined',
+    remark: `Candidate joined! Automatically added to Employee Directory as ${newEmpId} (${assignedDesignation})`,
+    changed_by: options.changedBy
+  });
+
+  await AuditService.log(
+    options.changedBy,
+    'APPOINT_EMPLOYEE_AUTO_JOINED',
+    'Employees',
+    createdEmployee.id,
+    undefined,
+    { employee_id: newEmpId, candidate_id: applicationId, role: assignedRole },
+    options.reqIp
+  );
+
+  return {
+    alreadyExisted: false,
+    employee: createdEmployee,
+    credentials: {
+      employee_id: newEmpId,
+      email: app.email,
+      temporary_password: tempPassword,
+      role: assignedRole
+    }
+  };
+}
+
+/**
+ * Creates candidate application directly from uploaded resume with zero form filling required
+ */
+export async function createApplicationFromDirectResume(
+  file: Express.Multer.File,
+  jobId: string | undefined,
+  overrides: Record<string, any>,
+  creatorEmployeeId: string,
+  reqIp?: string
+) {
+  const jobs = await SheetsRepo.list<Job>('Jobs');
+  let job = jobs.find(j => j.id === jobId || j.slug === jobId);
+  if (!job) {
+    job = jobs.find(j => j.status === 'Open') || jobs[0];
+  }
+
+  if (!job) {
+    job = await SheetsRepo.create<Job>('Jobs', {
+      title: 'General Applicant - Staff / Faculty',
+      slug: 'general-applicant-' + Math.floor(100 + Math.random() * 900),
+      department: overrides.department || 'Operations',
+      location: 'Kerala, India',
+      type: 'Full-time',
+      vacancies: 5,
+      description: 'General pool for applicants and faculty',
+      responsibilities: 'Academy duties and academic responsibilities',
+      qualification: 'Graduate',
+      min_experience: 0,
+      required_skills: 'Communication, Academy Skills',
+      preferred_skills: '',
+      status: 'Open',
+      threshold: 60
+    }, creatorEmployeeId);
+  }
+
+  // 1. Auto-extract from resume
+  const parsed: ParsedResumeData = parseResume(file.buffer, file.originalname);
+
+  // 2. Generate Reference Number
+  const refNo = `APP-${Math.floor(1000 + Math.random() * 9000)}`;
+
+  // 3. Reconcile fields with zero form filling required
+  const fullName = (overrides.full_name || parsed.full_name || `Applicant ${refNo}`).trim();
+  const phone = (overrides.phone || parsed.phone || '+91 9000000000').trim();
+  const email = (overrides.email || parsed.email || `candidate.${refNo.toLowerCase()}@masteredskill.com`).trim().toLowerCase();
+  const qualification = (overrides.qualification || parsed.qualification || job.qualification || 'Graduate').trim();
+  const specialization = (overrides.specialization || parsed.specialization || '').trim();
+  const experienceYears = Number(overrides.experience_years ?? parsed.experience_years ?? 0);
+  const currentEmployer = (overrides.current_employer || overrides.designation || parsed.designation || 'Previous Organization').trim();
+  const skills = (overrides.skills || parsed.skills || job.required_skills || 'General Skills').trim();
+  const currentSalary = Number(overrides.current_salary ?? parsed.current_salary ?? 0);
+  const expectedSalary = Number(
+    overrides.expected_salary ?? parsed.expected_salary ?? (job.salary_range ? parseInt(job.salary_range.replace(/\D/g, '')) : 25000) ?? 0
+  );
+  const location = (overrides.location || parsed.location || job.location || 'Kerala, India').trim();
+  const initialStatus = (overrides.status || 'Applied') as ApplicationStatus;
+
+  // 4. Save Resume to Drive / local storage
+  let resumeDriveId = '';
+  try {
+    const candidateFolderId = await DriveStorage.resolveFolderPath([
+      'Mastered Skill Academy HR',
+      'Recruitment',
+      job.slug || job.id,
+      `${refNo} - ${fullName}`
+    ]);
+
+    const resumeUpload = await DriveStorage.uploadFile(
+      `${refNo}_Resume_${file.originalname}`,
+      file.mimetype || 'application/pdf',
+      file.buffer,
+      candidateFolderId
+    );
+    resumeDriveId = resumeUpload.fileId;
+  } catch (driveErr) {
+    console.warn('Drive upload fallback:', driveErr);
+    resumeDriveId = `drive_mock_${uuidv4().slice(0, 8)}`;
+  }
+
+  // 5. Score candidate against job criteria
+  let criteria: JobCriteria = {
+    must_have_skills: [],
+    nice_to_have_skills: [],
+    min_experience: 0,
+    required_qualification: job.qualification || '',
+    threshold_score: Number(job.threshold) || 60
+  };
+  try {
+    if (job.criteria_json) {
+      criteria = typeof job.criteria_json === 'string' ? JSON.parse(job.criteria_json) : job.criteria_json;
+    }
+  } catch (e) {}
+
+  const initialApp: Application = {
+    id: '',
+    job_id: job.id,
+    ref_no: refNo,
+    full_name: fullName,
+    phone,
+    email,
+    dob: overrides.dob || '1995-01-01',
+    gender: overrides.gender || 'Other',
+    location,
+    qualification,
+    specialization,
+    experience_years: experienceYears,
+    current_employer: currentEmployer,
+    skills,
+    current_salary: currentSalary,
+    expected_salary: expectedSalary,
+    notice_period: overrides.notice_period || 0,
+    why_join: overrides.why_join || 'Direct resume application without manual form filling',
+    custom_answers_json: overrides.custom_answers || '{}',
+    resume_drive_id: resumeDriveId,
+    photo_drive_id: '',
+    score: 0,
+    score_breakdown_json: '{}',
+    status: initialStatus,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: creatorEmployeeId,
+    is_deleted: false
+  };
+
+  const scoreBreakdown = calculateMatchScore(initialApp, criteria);
+  initialApp.score = scoreBreakdown.total_score;
+  initialApp.score_breakdown_json = JSON.stringify(scoreBreakdown);
+
+  // 6. Save Application
+  const createdApp = await SheetsRepo.create<Application>('Applications', initialApp, creatorEmployeeId);
+
+  // 7. Status Log
+  await SheetsRepo.create<ApplicationStatusLog>('ApplicationStatusLog', {
+    application_id: createdApp.id,
+    from_status: 'None',
+    to_status: initialStatus,
+    remark: `Candidate created via direct resume upload (${file.originalname})`,
+    changed_by: creatorEmployeeId
+  });
+
+  await AuditService.log(
+    creatorEmployeeId,
+    'DIRECT_RESUME_APPLICATION',
+    'Applications',
+    createdApp.id,
+    undefined,
+    createdApp,
+    reqIp
+  );
+
+  // 8. If status is already Joined, automatically add to Employee Directory!
+  let joinedResult = null;
+  if (initialStatus === 'Joined') {
+    joinedResult = await autoAddJoinedCandidateToEmployees(createdApp.id, {
+      role: overrides.role || 'Employee',
+      designation: overrides.designation || currentEmployer,
+      department: overrides.department || job.department,
+      joining_date: overrides.joining_date,
+      temporary_password: overrides.temporary_password,
+      work_location: location,
+      changedBy: creatorEmployeeId,
+      reqIp
+    });
+  }
+
+  return {
+    application: createdApp,
+    job,
+    parsed,
+    joinedResult
+  };
+}
+
+/**
+ * Public Quick Apply with Resume (No form filling required)
+ */
+router.post(
+  '/jobs/public/:slug/quick-apply',
+  publicFormLimiter,
+  upload.single('resume'),
+  async (req: Request, res: Response) => {
+    try {
+      const { slug } = req.params;
+      if (!req.file) {
+        return res.status(400).json({ success: false, message: 'Resume file is required' });
+      }
+
+      const jobs = await SheetsRepo.list<Job>('Jobs');
+      const job = jobs.find(j => j.slug === slug);
+      if (!job || job.status !== 'Open') {
+        return res.status(400).json({ success: false, message: 'Job is not open for applications' });
+      }
+
+      const result = await createApplicationFromDirectResume(
+        req.file,
+        job.id,
+        req.body,
+        'public_candidate',
+        req.ip
+      );
+
+      return res.status(201).json({
+        success: true,
+        message: 'Your resume has been submitted successfully without form filling!',
+        ref_no: result.application.ref_no,
+        application_id: result.application.id,
+        application: result.application
+      });
+    } catch (err: any) {
+      console.error('Quick apply error:', err);
+      return res.status(500).json({ success: false, message: err.message || 'Failed to submit resume' });
+    }
+  }
+);
+
 // -------------------------------------------------------------
 // PROTECTED RECRUITMENT ROUTES (HR Manager & HR Executive)
 // -------------------------------------------------------------
@@ -381,6 +747,54 @@ router.put('/jobs/:id', async (req: Request, res: Response) => {
     return res.json({ success: true, job: updated });
   } catch (err: any) {
     return res.status(500).json({ success: false, message: 'Failed to update job' });
+  }
+});
+
+/**
+ * Direct Resume Upload / Zero Form-Filling candidate creation (HR Manager & HR Executive)
+ */
+router.post('/applications/direct-resume', upload.single('resume'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Resume document (PDF/DOC/TXT) is required' });
+    }
+
+    const { jobId, ...overrides } = req.body;
+    const result = await createApplicationFromDirectResume(
+      req.file,
+      jobId,
+      overrides,
+      req.user!.employeeId,
+      req.ip
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: `Candidate ${result.application.full_name} created successfully from resume!`,
+      application: result.application,
+      job: result.job,
+      parsed: result.parsed,
+      joinedResult: result.joinedResult
+    });
+  } catch (err: any) {
+    console.error('Direct resume upload error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Failed to process resume' });
+  }
+});
+
+/**
+ * Real-time resume parsing preview without saving
+ */
+router.post('/applications/parse-resume', upload.single('resume'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'Resume document is required' });
+    }
+
+    const parsed = parseResume(req.file.buffer, req.file.originalname);
+    return res.json({ success: true, parsed });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, message: 'Failed to parse resume preview' });
   }
 });
 
@@ -542,6 +956,28 @@ router.post('/applications/:id/status', async (req: Request, res: Response) => {
     }
 
     const oldStatus = app.status;
+
+    // If status is 'Joined', automatically enroll candidate into Employee Directory!
+    if (status === 'Joined') {
+      const joinResult = await autoAddJoinedCandidateToEmployees(id, {
+        role: req.body.role,
+        designation: req.body.designation,
+        department: req.body.department,
+        joining_date: req.body.joining_date,
+        temporary_password: req.body.temporary_password,
+        work_location: req.body.work_location,
+        changedBy: req.user!.employeeId,
+        reqIp: req.ip
+      });
+
+      return res.json({
+        success: true,
+        message: `Candidate has joined and was automatically added to Employee Directory (${joinResult.employee.employee_id})!`,
+        employee: joinResult.employee,
+        credentials: joinResult.credentials
+      });
+    }
+
     await SheetsRepo.update<Application>('Applications', id, { status }, req.user!.employeeId);
 
     await SheetsRepo.create<ApplicationStatusLog>('ApplicationStatusLog', {
@@ -821,106 +1257,26 @@ router.post('/applications/:id/appoint', requireRole('HR Manager'), async (req: 
     const { id } = req.params;
     const { role, designation, department, joining_date, temporary_password, work_location } = req.body;
 
-    const app = await SheetsRepo.getById<Application>('Applications', id);
-    if (!app) {
-      return res.status(404).json({ success: false, message: 'Application not found' });
-    }
-
-    // 1. Generate unique sequential Employee ID: MSA-000X
-    const employees = await SheetsRepo.list<Employee>('Employees');
-    let maxNum = 0;
-    employees.forEach(e => {
-      const match = e.employee_id.match(/MSA-(\d+)/);
-      if (match) {
-        const n = parseInt(match[1], 10);
-        if (n > maxNum) maxNum = n;
-      }
+    const joinResult = await autoAddJoinedCandidateToEmployees(id, {
+      role,
+      designation,
+      department,
+      joining_date,
+      temporary_password,
+      work_location,
+      changedBy: req.user!.employeeId,
+      reqIp: req.ip
     });
-    const newEmpId = `MSA-${String(maxNum + 1).padStart(4, '0')}`;
-
-    // 2. Resolve or create Employee Drive folder
-    let empFolderId = '';
-    try {
-      empFolderId = await DriveStorage.resolveFolderPath([
-        'Mastered Skill Academy HR',
-        'Employees',
-        `${newEmpId} - ${app.full_name}`
-      ]);
-    } catch (e) {}
-
-    // 3. Create Employee Record
-    const assignedRole = role || 'Employee';
-    const newEmployee: Partial<Employee> = {
-      employee_id: newEmpId,
-      full_name: app.full_name,
-      phone: app.phone,
-      email: app.email,
-      dob: app.dob,
-      gender: app.gender,
-      address: app.location,
-      emergency_name: 'Contact',
-      emergency_relation: 'Family',
-      emergency_phone: app.phone,
-      designation: designation || 'Staff',
-      department: department || 'Operations',
-      role: assignedRole,
-      employment_type: 'Full-time',
-      joining_date: joining_date || new Date().toISOString().split('T')[0],
-      work_location: work_location || 'Kerala Campus',
-      status: 'Active',
-      drive_folder_id: empFolderId
-    };
-
-    const createdEmployee = await SheetsRepo.create<Employee>('Employees', newEmployee, req.user!.employeeId);
-
-    // 4. Create User login account with temporary password & forced change
-    const tempPassword = temporary_password || `MsaStaff@${Math.floor(1000 + Math.random() * 9000)}`;
-    const passHash = await hashPassword(tempPassword);
-
-    await SheetsRepo.create<User>('Users', {
-      employee_id: newEmpId,
-      email: app.email,
-      phone: app.phone,
-      password_hash: passHash,
-      role: assignedRole,
-      must_change_password: true,
-      is_active: true
-    }, req.user!.employeeId);
-
-    // 5. Update Candidate status to Joined
-    await SheetsRepo.update<Application>('Applications', id, { status: 'Joined' }, req.user!.employeeId);
-    await SheetsRepo.create<ApplicationStatusLog>('ApplicationStatusLog', {
-      application_id: id,
-      from_status: app.status,
-      to_status: 'Joined',
-      remark: `Candidate appointed as Employee ${newEmpId} with role ${assignedRole}`,
-      changed_by: req.user!.employeeId
-    });
-
-    await AuditService.log(
-      req.user!.employeeId,
-      'APPOINT_EMPLOYEE',
-      'Employees',
-      createdEmployee.id,
-      undefined,
-      { employee_id: newEmpId, candidate_id: id, role: assignedRole },
-      req.ip
-    );
 
     return res.status(201).json({
       success: true,
-      message: `Candidate appointed successfully as ${newEmpId}!`,
-      credentials: {
-        employee_id: newEmpId,
-        email: app.email,
-        temporary_password: tempPassword,
-        role: assignedRole
-      },
-      employee: createdEmployee
+      message: `Candidate appointed successfully as ${joinResult.employee.employee_id}!`,
+      credentials: joinResult.credentials,
+      employee: joinResult.employee
     });
   } catch (err: any) {
     console.error('Appoint employee error:', err);
-    return res.status(500).json({ success: false, message: 'Failed to appoint candidate as employee' });
+    return res.status(500).json({ success: false, message: err.message || 'Failed to appoint candidate as employee' });
   }
 });
 

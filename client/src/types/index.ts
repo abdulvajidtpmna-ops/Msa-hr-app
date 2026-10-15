@@ -158,6 +158,7 @@ export interface Application {
   why_join?: string;
   custom_answers_json?: string;
   resume_drive_id: string;
+  resume_url?: string;
   photo_drive_id?: string;
   score: number | string;
   score_breakdown_json?: string;

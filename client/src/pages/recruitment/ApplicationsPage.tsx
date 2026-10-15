@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   Users,
   Sparkles,
@@ -18,7 +18,17 @@ import {
   Download,
   Share2,
   Key,
-  ShieldAlert
+  ShieldAlert,
+  Upload,
+  Plus,
+  Briefcase,
+  Building,
+  Phone,
+  Mail,
+  Check,
+  ChevronDown,
+  RefreshCw,
+  ArrowRight
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -108,6 +118,43 @@ export const ApplicationsPage: React.FC = () => {
   const [appointPassword, setAppointPassword] = useState('');
   const [isAppointing, setIsAppointing] = useState(false);
   const [appointedCredentials, setAppointedCredentials] = useState<any>(null);
+
+  const navigate = useNavigate();
+
+  // Direct Resume Upload State (Zero Form Filling)
+  const [showDirectResumeModal, setShowDirectResumeModal] = useState(false);
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [targetJobId, setTargetJobId] = useState<string>('');
+  const [isParsingResume, setIsParsingResume] = useState(false);
+  const [parsedData, setParsedData] = useState<any>(null);
+  const [isUploadingDirectResume, setIsUploadingDirectResume] = useState(false);
+  const [showOverrideDetails, setShowOverrideDetails] = useState(false);
+
+  // Auto-detected / override fields
+  const [candidateName, setCandidateName] = useState('');
+  const [candidatePhone, setCandidatePhone] = useState('');
+  const [candidateEmail, setCandidateEmail] = useState('');
+  const [candidateDesignation, setCandidateDesignation] = useState('');
+  const [candidateDepartment, setCandidateDepartment] = useState('');
+  const [candidateCurrentSalary, setCandidateCurrentSalary] = useState('');
+  const [candidateExpectedSalary, setCandidateExpectedSalary] = useState('');
+  const [candidateExperience, setCandidateExperience] = useState('0');
+  const [candidateQualification, setCandidateQualification] = useState('');
+  const [candidateSpecialization, setCandidateSpecialization] = useState('');
+  const [candidateSkills, setCandidateSkills] = useState('');
+  const [candidateLocation, setCandidateLocation] = useState('');
+  const [candidateStatus, setCandidateStatus] = useState<string>('Applied');
+
+  // Success Notification / Joined Employee Alert Modal
+  const [joinedAlert, setJoinedAlert] = useState<{
+    show: boolean;
+    employeeName: string;
+    employeeId: string;
+    designation: string;
+    department: string;
+    role: string;
+    credentials?: any;
+  } | null>(null);
 
   const fetchApplications = async () => {
     setIsLoading(true);
@@ -279,6 +326,167 @@ export const ApplicationsPage: React.FC = () => {
     }
   };
 
+  const resetDirectResumeForm = () => {
+    setResumeFile(null);
+    setParsedData(null);
+    setShowOverrideDetails(false);
+    setCandidateName('');
+    setCandidatePhone('');
+    setCandidateEmail('');
+    setCandidateDesignation('');
+    setCandidateDepartment('');
+    setCandidateCurrentSalary('');
+    setCandidateExpectedSalary('');
+    setCandidateExperience('0');
+    setCandidateQualification('');
+    setCandidateSpecialization('');
+    setCandidateSkills('');
+    setCandidateLocation('');
+    setCandidateStatus('Applied');
+  };
+
+  const handleResumeFileSelect = async (file: File) => {
+    setResumeFile(file);
+    setIsParsingResume(true);
+
+    // Initial local guess from filename
+    const cleanFileName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b(resume|cv|biodata|profile|doc|pdf|docx|mastered|skill|academy|latest|updated|final|app)\b/gi, '')
+      .replace(/[0-9]/g, '')
+      .trim();
+    const guessedName = cleanFileName
+      ? cleanFileName
+          .split(' ')
+          .filter(Boolean)
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ')
+      : 'Applicant';
+
+    setCandidateName(guessedName);
+
+    try {
+      const formData = new FormData();
+      formData.append('resume', file);
+      const res = await api.post<{ success: boolean; parsed: any }>('/recruitment/applications/parse-resume', formData);
+      if (res.success && res.parsed) {
+        setParsedData(res.parsed);
+        if (res.parsed.full_name) setCandidateName(res.parsed.full_name);
+        if (res.parsed.phone) setCandidatePhone(res.parsed.phone);
+        if (res.parsed.email) setCandidateEmail(res.parsed.email);
+        if (res.parsed.designation) setCandidateDesignation(res.parsed.designation);
+        if (res.parsed.department) setCandidateDepartment(res.parsed.department);
+        if (res.parsed.current_salary) setCandidateCurrentSalary(String(res.parsed.current_salary));
+        if (res.parsed.expected_salary) setCandidateExpectedSalary(String(res.parsed.expected_salary));
+        if (res.parsed.experience_years !== undefined) setCandidateExperience(String(res.parsed.experience_years));
+        if (res.parsed.qualification) setCandidateQualification(res.parsed.qualification);
+        if (res.parsed.specialization) setCandidateSpecialization(res.parsed.specialization);
+        if (res.parsed.skills) setCandidateSkills(res.parsed.skills);
+        if (res.parsed.location) setCandidateLocation(res.parsed.location);
+      }
+    } catch (e) {
+      console.warn('Parsing preview fallback:', e);
+    } finally {
+      setIsParsingResume(false);
+    }
+  };
+
+  const handleDirectResumeSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resumeFile) {
+      alert('Please select a resume file to upload.');
+      return;
+    }
+
+    setIsUploadingDirectResume(true);
+    try {
+      const formData = new FormData();
+      formData.append('resume', resumeFile);
+      if (targetJobId) formData.append('jobId', targetJobId);
+      if (candidateName) formData.append('full_name', candidateName);
+      if (candidatePhone) formData.append('phone', candidatePhone);
+      if (candidateEmail) formData.append('email', candidateEmail);
+      if (candidateDesignation) formData.append('designation', candidateDesignation);
+      if (candidateDepartment) formData.append('department', candidateDepartment);
+      if (candidateCurrentSalary) formData.append('current_salary', candidateCurrentSalary);
+      if (candidateExpectedSalary) formData.append('expected_salary', candidateExpectedSalary);
+      if (candidateExperience) formData.append('experience_years', candidateExperience);
+      if (candidateQualification) formData.append('qualification', candidateQualification);
+      if (candidateSpecialization) formData.append('specialization', candidateSpecialization);
+      if (candidateSkills) formData.append('skills', candidateSkills);
+      if (candidateLocation) formData.append('location', candidateLocation);
+      if (candidateStatus) formData.append('status', candidateStatus);
+
+      const res = await api.post<{
+        success: boolean;
+        message: string;
+        application: Application;
+        joinedResult?: any;
+      }>('/recruitment/applications/direct-resume', formData);
+
+      if (res.success) {
+        setShowDirectResumeModal(false);
+        resetDirectResumeForm();
+        fetchApplications();
+
+        if (res.joinedResult && res.joinedResult.employee) {
+          setJoinedAlert({
+            show: true,
+            employeeName: res.joinedResult.employee.full_name,
+            employeeId: res.joinedResult.employee.employee_id,
+            designation: res.joinedResult.employee.designation,
+            department: res.joinedResult.employee.department,
+            role: res.joinedResult.employee.role,
+            credentials: res.joinedResult.credentials
+          });
+        } else {
+          alert(`Success! Candidate "${res.application.full_name}" created & added to pipeline (Ref: ${res.application.ref_no}, Match Score: ${res.application.score}%)`);
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to upload resume and create candidate');
+    } finally {
+      setIsUploadingDirectResume(false);
+    }
+  };
+
+  const handleStatusChange = async (appId: string, newStatus: string) => {
+    try {
+      const res = await api.post<{
+        success: boolean;
+        message: string;
+        employee?: any;
+        credentials?: any;
+      }>(`/recruitment/applications/${appId}/status`, {
+        status: newStatus
+      });
+
+      if (res.success) {
+        fetchApplications();
+        if (activeAppId === appId) {
+          loadApplicationDetails(appId);
+        }
+
+        if (newStatus === 'Joined' && res.employee) {
+          setJoinedAlert({
+            show: true,
+            employeeName: res.employee.full_name,
+            employeeId: res.employee.employee_id,
+            designation: res.employee.designation,
+            department: res.employee.department,
+            role: res.employee.role,
+            credentials: res.credentials
+          });
+        } else {
+          alert(res.message || `Status updated to ${newStatus}`);
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update candidate status');
+    }
+  };
+
   const filteredApps = applications.filter(app => {
     if (selectedJobId && app.job_id !== selectedJobId) return false;
     if (selectedStatus && app.status !== selectedStatus) return false;
@@ -293,6 +501,15 @@ export const ApplicationsPage: React.FC = () => {
     }
     return true;
   });
+
+  const getResumeUrl = (app: Application | any) => {
+    if (!app) return null;
+    if (app.resume_url) return app.resume_url;
+    if (app.resume_drive_id && typeof app.resume_drive_id === 'string' && !app.resume_drive_id.startsWith('drive_mock_')) {
+      return `/api/files/stream/${app.resume_drive_id}`;
+    }
+    return null;
+  };
 
   return (
     <div className="space-y-6">
@@ -335,6 +552,18 @@ export const ApplicationsPage: React.FC = () => {
           >
             <Sparkles className="w-4 h-4 text-emerald-300" />
             {isAutoScreening ? 'Screening Candidates...' : 'Auto Screen & Shortlist'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              resetDirectResumeForm();
+              setShowDirectResumeModal(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md transition"
+          >
+            <Upload className="w-4 h-4 text-emerald-400" />
+            Direct Resume Upload
           </button>
         </div>
       </div>
@@ -450,33 +679,52 @@ export const ApplicationsPage: React.FC = () => {
                         </td>
 
                         <td className="py-3.5 px-4">
-                          <span
-                            className={`px-2.5 py-1 rounded-full text-[10px] font-bold ${
+                          <select
+                            value={app.status}
+                            onChange={e => handleStatusChange(app.id, e.target.value)}
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition cursor-pointer ${
                               app.status === 'Joined'
-                                ? 'bg-emerald-100 text-emerald-700'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
                                 : app.status === 'Shortlisted'
-                                ? 'bg-brand-100 text-brand-700'
+                                ? 'bg-brand-100 text-brand-800 border-brand-300'
                                 : app.status === 'Interview Scheduled'
-                                ? 'bg-blue-100 text-blue-700'
+                                ? 'bg-blue-100 text-blue-800 border-blue-300'
                                 : app.status === 'Selected'
-                                ? 'bg-purple-100 text-purple-700'
+                                ? 'bg-purple-100 text-purple-800 border-purple-300'
                                 : app.status === 'Rejected'
-                                ? 'bg-rose-100 text-rose-700'
-                                : 'bg-slate-100 text-slate-600'
+                                ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                           >
-                            {app.status}
-                          </span>
+                            {PIPELINE_STATUSES.map(st => (
+                              <option key={st} value={st}>
+                                {st}
+                              </option>
+                            ))}
+                          </select>
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
-                          <button
-                            type="button"
-                            onClick={() => loadApplicationDetails(app.id)}
-                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
-                          >
-                            View & Process
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {getResumeUrl(app) && (
+                              <a
+                                href={getResumeUrl(app)!}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="View Resume"
+                                className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition"
+                              >
+                                <FileText className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => loadApplicationDetails(app.id)}
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
+                            >
+                              View & Process
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -511,12 +759,38 @@ export const ApplicationsPage: React.FC = () => {
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold text-brand-700">{app.ref_no}</span>
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded">
-                          {app.score}%
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {getResumeUrl(app) && (
+                            <a
+                              href={getResumeUrl(app)!}
+                              target="_blank"
+                              rel="noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              title="View Resume"
+                              className="text-slate-400 hover:text-brand-600 transition"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                            </a>
+                          )}
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 bg-brand-50 text-brand-800 rounded">
+                            {app.score}%
+                          </span>
+                        </div>
                       </div>
                       <p className="font-bold text-xs text-slate-900">{app.full_name}</p>
                       <p className="text-[11px] text-slate-500 truncate">{app.qualification} • {app.experience_years} yrs</p>
+                      <div className="pt-2 mt-1 border-t border-slate-100 flex items-center justify-between text-[10px]" onClick={e => e.stopPropagation()}>
+                        <span className="text-slate-400 font-medium">Stage:</span>
+                        <select
+                          value={app.status}
+                          onChange={e => handleStatusChange(app.id, e.target.value)}
+                          className="font-bold py-0.5 px-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 cursor-pointer"
+                        >
+                          {PIPELINE_STATUSES.map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -539,36 +813,61 @@ export const ApplicationsPage: React.FC = () => {
           <div className="space-y-6">
             {/* Status & Quick Action Header */}
             <div className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">Current Stage</span>
-                <p className="text-base font-black text-brand-700">{appDetails.application.status}</p>
+              <div className="flex items-center gap-3">
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase">Current Stage</span>
+                  <p className="text-base font-black text-brand-700">{appDetails.application.status}</p>
+                </div>
+                <div className="flex items-center gap-1.5 pl-3 border-l border-slate-200">
+                  <span className="text-xs text-slate-500 font-semibold">Move:</span>
+                  <select
+                    value={appDetails.application.status}
+                    onChange={e => handleStatusChange(appDetails.application.id, e.target.value)}
+                    className="px-2.5 py-1 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 shadow-sm cursor-pointer"
+                  >
+                    {PIPELINE_STATUSES.map(s => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               {/* Action Buttons based on Stage */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {getResumeUrl(appDetails.application) && (
+                  <a
+                    href={getResumeUrl(appDetails.application)!}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition inline-flex items-center gap-1"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-brand-600" /> View Resume
+                  </a>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowInterviewModal(true)}
-                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition"
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1"
                 >
-                  <Calendar className="w-3.5 h-3.5 inline mr-1" /> Schedule Interview
+                  <Calendar className="w-3.5 h-3.5" /> Schedule Interview
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowOfferModal(true)}
-                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition"
+                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold transition inline-flex items-center gap-1"
                 >
-                  <DollarSign className="w-3.5 h-3.5 inline mr-1" /> Make Offer
+                  <DollarSign className="w-3.5 h-3.5" /> Make Offer
                 </button>
 
-                {isHRManager && appDetails.application.status !== 'Joined' && (
+                {appDetails.application.status !== 'Joined' && (
                   <button
                     type="button"
-                    onClick={() => setShowAppointModal(true)}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition"
+                    onClick={() => handleStatusChange(appDetails.application.id, 'Joined')}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black shadow-md transition inline-flex items-center gap-1"
                   >
-                    <UserCheck className="w-3.5 h-3.5 inline mr-1" /> Appoint as Employee
+                    <UserCheck className="w-3.5 h-3.5" /> Mark Joined (Add to Directory)
                   </button>
                 )}
               </div>
@@ -1001,6 +1300,385 @@ export const ApplicationsPage: React.FC = () => {
               {isAppointing ? 'Creating Employee Profile...' : 'Confirm & Appoint Employee'}
             </button>
           </form>
+        )}
+      </Modal>
+
+      {/* Direct Resume Upload Modal (Zero Form Filling) */}
+      <Modal
+        isOpen={showDirectResumeModal}
+        onClose={() => {
+          if (!isUploadingDirectResume) {
+            setShowDirectResumeModal(false);
+            resetDirectResumeForm();
+          }
+        }}
+        title="Direct Resume Upload (Zero Form Filling)"
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={handleDirectResumeSubmit} className="space-y-4">
+          <div className="p-3 bg-brand-50/70 rounded-2xl border border-brand-100 text-xs text-brand-900 flex items-start gap-2.5">
+            <Sparkles className="w-4 h-4 text-brand-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="font-bold">Instant Candidate Creation from Resume</p>
+              <p className="text-slate-600 mt-0.5">
+                Drop any PDF/Word resume. Candidate name, current designation, department, contact details, and salary are automatically extracted—no manual form filling required!
+              </p>
+            </div>
+          </div>
+
+          {/* Drag & Drop File Zone */}
+          <div className="border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-6 text-center transition bg-slate-50/50">
+            <input
+              type="file"
+              id="directResumeInput"
+              accept=".pdf,.doc,.docx,.txt"
+              className="hidden"
+              onChange={e => {
+                const f = e.target.files?.[0];
+                if (f) handleResumeFileSelect(f);
+              }}
+            />
+            {resumeFile ? (
+              <div className="space-y-2">
+                <div className="w-12 h-12 bg-brand-100 text-brand-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-slate-800">{resumeFile.name}</p>
+                  <p className="text-xs text-slate-400">{(resumeFile.size / 1024).toFixed(1)} KB</p>
+                </div>
+
+                {isParsingResume ? (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-semibold animate-pulse">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    Extracting candidate details...
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                    Candidate data auto-extracted
+                  </div>
+                )}
+
+                <div className="pt-2">
+                  <label
+                    htmlFor="directResumeInput"
+                    className="cursor-pointer text-xs font-bold text-brand-600 hover:text-brand-700 underline"
+                  >
+                    Replace with another resume
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <label htmlFor="directResumeInput" className="cursor-pointer block space-y-2">
+                <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                  <Upload className="w-6 h-6" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-slate-800">
+                    Click to select resume or drag & drop file
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Supports PDF, Word (.docx, .doc), or TXT (Max 10MB)
+                  </p>
+                </div>
+              </label>
+            )}
+          </div>
+
+          {/* Job and Pipeline Stage Selectors */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Target Job Opening *</label>
+              <select
+                value={targetJobId}
+                onChange={e => setTargetJobId(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800"
+              >
+                <option value="">General Talent Pool (Any Role)</option>
+                {jobs.map(j => (
+                  <option key={j.id} value={j.id}>
+                    {j.title} ({j.department})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Pipeline Stage *</label>
+              <select
+                value={candidateStatus}
+                onChange={e => setCandidateStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl font-semibold text-slate-800"
+              >
+                {PIPELINE_STATUSES.map(s => (
+                  <option key={s} value={s}>
+                    {s === 'Joined' ? 'Joined (Auto-add to Employee Directory)' : s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Extracted Details Snapshot / Quick Summary */}
+          {resumeFile && (
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Extracted Candidate Profile
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowOverrideDetails(!showOverrideDetails)}
+                  className="text-xs font-bold text-brand-600 hover:text-brand-700 flex items-center gap-1"
+                >
+                  {showOverrideDetails ? 'Hide Editable Fields' : 'Review / Edit Fields (Optional)'}
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showOverrideDetails ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+
+              {/* Fast Badges Summary */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+                <div className="p-2 bg-white rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Name</span>
+                  <p className="font-bold text-slate-800 truncate">{candidateName || 'Applicant'}</p>
+                </div>
+                <div className="p-2 bg-white rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Designation</span>
+                  <p className="font-bold text-slate-800 truncate">{candidateDesignation || 'Not specified'}</p>
+                </div>
+                <div className="p-2 bg-white rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Department</span>
+                  <p className="font-bold text-slate-800 truncate">{candidateDepartment || 'Academics'}</p>
+                </div>
+                <div className="p-2 bg-white rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Contact Phone</span>
+                  <p className="font-bold text-slate-800 truncate">{candidatePhone || 'Not specified'}</p>
+                </div>
+                <div className="p-2 bg-white rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Contact Email</span>
+                  <p className="font-bold text-slate-800 truncate">{candidateEmail || 'Not specified'}</p>
+                </div>
+                <div className="p-2 bg-white rounded-xl border border-slate-100">
+                  <span className="text-slate-400 text-[10px] uppercase font-bold block">Current Salary</span>
+                  <p className="font-bold text-slate-800 truncate">
+                    {candidateCurrentSalary ? `₹${Number(candidateCurrentSalary).toLocaleString('en-IN')}` : 'Not specified'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Optional Editable Details Accordion */}
+              {showOverrideDetails && (
+                <div className="pt-3 border-t border-slate-200/80 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Full Name</label>
+                      <input
+                        type="text"
+                        value={candidateName}
+                        onChange={e => setCandidateName(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Phone Number</label>
+                      <input
+                        type="text"
+                        value={candidatePhone}
+                        onChange={e => setCandidatePhone(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Email</label>
+                      <input
+                        type="email"
+                        value={candidateEmail}
+                        onChange={e => setCandidateEmail(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Current Designation</label>
+                      <input
+                        type="text"
+                        value={candidateDesignation}
+                        onChange={e => setCandidateDesignation(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Department</label>
+                      <input
+                        type="text"
+                        value={candidateDepartment}
+                        onChange={e => setCandidateDepartment(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Current Monthly Salary (₹)</label>
+                      <input
+                        type="number"
+                        value={candidateCurrentSalary}
+                        onChange={e => setCandidateCurrentSalary(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Expected Monthly Salary (₹)</label>
+                      <input
+                        type="number"
+                        value={candidateExpectedSalary}
+                        onChange={e => setCandidateExpectedSalary(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Experience (Years)</label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={candidateExperience}
+                        onChange={e => setCandidateExperience(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Qualification</label>
+                      <input
+                        type="text"
+                        value={candidateQualification}
+                        onChange={e => setCandidateQualification(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-600 mb-1">Location</label>
+                      <input
+                        type="text"
+                        value={candidateLocation}
+                        onChange={e => setCandidateLocation(e.target.value)}
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {candidateStatus === 'Joined' && (
+            <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-xs text-emerald-900 flex items-center gap-2">
+              <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                <strong>Auto-Enrollment Active:</strong> This candidate will immediately receive an employee ID (e.g. <code>MSA-0004</code>) and appear in the Employee Directory upon upload.
+              </span>
+            </div>
+          )}
+
+          {/* Submit Action */}
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              disabled={isUploadingDirectResume}
+              onClick={() => {
+                setShowDirectResumeModal(false);
+                resetDirectResumeForm();
+              }}
+              className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={!resumeFile || isUploadingDirectResume}
+              className={`px-5 py-2.5 rounded-xl font-bold text-xs shadow-md transition flex items-center gap-1.5 text-white ${
+                candidateStatus === 'Joined'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-slate-900 hover:bg-slate-800'
+              } disabled:opacity-50`}
+            >
+              {isUploadingDirectResume ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Creating Candidate Profile...
+                </>
+              ) : candidateStatus === 'Joined' ? (
+                <>
+                  <UserCheck className="w-4 h-4" />
+                  Upload & Add to Employee Directory
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4" />
+                  Create Candidate from Resume
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Candidate Joined & Added to Directory Success Alert Modal */}
+      <Modal
+        isOpen={!!joinedAlert?.show}
+        onClose={() => setJoinedAlert(null)}
+        title="Candidate Appointed to Employee Directory!"
+        maxWidth="max-w-lg"
+      >
+        {joinedAlert && (
+          <div className="space-y-4 text-center">
+            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
+              <CheckCircle2 className="w-9 h-9" />
+            </div>
+
+            <div>
+              <h4 className="text-xl font-black text-slate-900">{joinedAlert.employeeName}</h4>
+              <p className="text-xs text-slate-500 mt-1">
+                {joinedAlert.designation} • {joinedAlert.department}
+              </p>
+              <span className="inline-block mt-2 px-3 py-1 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-full border border-emerald-200">
+                Assigned Employee ID: {joinedAlert.employeeId}
+              </span>
+            </div>
+
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left text-xs space-y-2">
+              <p className="font-bold text-slate-700">Employee Login Credentials Created:</p>
+              <div className="font-mono bg-white p-3 rounded-xl border border-slate-200 space-y-1">
+                <p><span className="text-slate-400">Employee ID:</span> <strong>{joinedAlert.employeeId}</strong></p>
+                <p><span className="text-slate-400">Login Email:</span> <strong>{joinedAlert.credentials?.email || 'N/A'}</strong></p>
+                <p><span className="text-slate-400">Password:</span> <strong>{joinedAlert.credentials?.temporary_password || 'Current / Default'}</strong></p>
+                <p><span className="text-slate-400">Assigned Role:</span> <strong>{joinedAlert.role}</strong></p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = `Welcome to Mastered Skill Academy!\nYour employee portal account has been created:\nEmployee ID: ${joinedAlert.employeeId}\nEmail: ${joinedAlert.credentials?.email}\nPassword: ${joinedAlert.credentials?.temporary_password}\nPortal Link: ${window.location.origin}/login`;
+                  navigator.clipboard.writeText(text);
+                  alert('Credentials copied to clipboard!');
+                }}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition"
+              >
+                Copy WhatsApp Message
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setJoinedAlert(null);
+                  navigate('/employees');
+                }}
+                className="flex-1 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs transition flex items-center justify-center gap-1"
+              >
+                View in Staff Directory <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
         )}
       </Modal>
     </div>

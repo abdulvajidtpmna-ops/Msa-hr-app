@@ -14,7 +14,9 @@ import {
   FileText,
   Building2,
   Calendar,
-  Send
+  Send,
+  Sparkles,
+  Zap
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Job, CustomFieldConfig } from '../../types';
@@ -54,6 +56,75 @@ export const JobApplyPage: React.FC = () => {
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Quick Apply with Resume State (Zero Form Filling)
+  const [applyMode, setApplyMode] = useState<'quick' | 'full'>('quick');
+  const [quickResumeFile, setQuickResumeFile] = useState<File | null>(null);
+  const [quickName, setQuickName] = useState('');
+  const [quickPhone, setQuickPhone] = useState('');
+  const [quickEmail, setQuickEmail] = useState('');
+  const [quickConsent, setQuickConsent] = useState(true);
+  const [isSubmittingQuick, setIsSubmittingQuick] = useState(false);
+
+  const handleQuickResumeSelect = (file: File) => {
+    setQuickResumeFile(file);
+    const cleanFileName = file.name
+      .replace(/\.[^/.]+$/, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\b(resume|cv|biodata|profile|doc|pdf|docx|mastered|skill|academy|latest|updated|final|app)\b/gi, '')
+      .replace(/[0-9]/g, '')
+      .trim();
+    if (cleanFileName && !quickName) {
+      const guessed = cleanFileName
+        .split(' ')
+        .filter(Boolean)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+      setQuickName(guessed);
+    }
+  };
+
+  const handleQuickSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickResumeFile) {
+      alert('Please upload your resume file (PDF or Word)');
+      return;
+    }
+    if (!quickConsent) {
+      alert('Please accept the data processing consent');
+      return;
+    }
+
+    setIsSubmittingQuick(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('resume', quickResumeFile);
+      if (quickName) formData.append('full_name', quickName);
+      if (quickPhone) formData.append('phone', quickPhone);
+      if (quickEmail) formData.append('email', quickEmail);
+      formData.append('website_trap', honeypot);
+
+      const res = await api.post<{ success: boolean; ref_no: string; message: string; full_name?: string }>(
+        `/recruitment/jobs/public/${slug}/quick-apply`,
+        formData
+      );
+
+      if (res.success) {
+        navigate(
+          `/apply/${slug}/thank-you?ref=${res.ref_no}&name=${encodeURIComponent(
+            res.full_name || quickName || 'Candidate'
+          )}&job=${encodeURIComponent(job?.title || '')}`
+        );
+      } else {
+        setError(res.message || 'Failed to submit application');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to submit application');
+    } finally {
+      setIsSubmittingQuick(false);
+    }
+  };
 
   const shareUrl = window.location.href;
 
@@ -267,7 +338,7 @@ export const JobApplyPage: React.FC = () => {
           )}
         </div>
 
-        {/* Closed Job Alert or Application Form */}
+        {/* Closed Job Alert or Application Forms */}
         {closedMessage ? (
           <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center text-amber-900">
             <AlertCircle className="w-8 h-8 mx-auto text-amber-600 mb-2" />
@@ -275,11 +346,176 @@ export const JobApplyPage: React.FC = () => {
             <p className="text-xs text-amber-700 mt-1">{closedMessage}</p>
           </div>
         ) : (
-          <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-sm space-y-6">
-            <div>
-              <h3 className="text-lg font-black text-slate-900">Candidate Application Form</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Please provide accurate details for screening.</p>
+          <div className="space-y-4">
+            {/* Mode Switcher Tabs */}
+            <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-sm max-w-md mx-auto">
+              <button
+                type="button"
+                onClick={() => setApplyMode('quick')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  applyMode === 'quick'
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Zap className="w-3.5 h-3.5 text-amber-300" />
+                Quick Resume Apply
+              </button>
+              <button
+                type="button"
+                onClick={() => setApplyMode('full')}
+                className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+                  applyMode === 'full'
+                    ? 'bg-brand-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                Detailed Form
+              </button>
             </div>
+
+            {applyMode === 'quick' ? (
+              <form
+                onSubmit={handleQuickSubmit}
+                className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-sm space-y-6"
+              >
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <Zap className="w-5 h-5 text-amber-500" /> Quick Apply with Resume
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    No long forms! Upload your resume and our system will extract your skills, experience, and contact details automatically.
+                  </p>
+                </div>
+
+                {/* Drag & Drop File Zone */}
+                <div className="border-2 border-dashed border-slate-300 hover:border-brand-500 rounded-2xl p-8 text-center transition bg-slate-50/60">
+                  <input
+                    type="file"
+                    id="quickResumeInput"
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) handleQuickResumeSelect(f);
+                    }}
+                  />
+                  {quickResumeFile ? (
+                    <div className="space-y-2">
+                      <div className="w-12 h-12 bg-brand-100 text-brand-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-slate-800">{quickResumeFile.name}</p>
+                        <p className="text-xs text-slate-400">{(quickResumeFile.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                      <div className="pt-2">
+                        <label
+                          htmlFor="quickResumeInput"
+                          className="cursor-pointer text-xs font-bold text-brand-600 hover:text-brand-700 underline"
+                        >
+                          Choose a different resume file
+                        </label>
+                      </div>
+                    </div>
+                  ) : (
+                    <label htmlFor="quickResumeInput" className="cursor-pointer block space-y-2">
+                      <div className="w-12 h-12 bg-slate-100 text-slate-600 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-slate-800">
+                          Click to upload your resume or drag & drop here
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          PDF, DOCX, DOC, or TXT up to 10MB
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+
+                {/* Optional Contact Fields (Pre-detected or quick edit) */}
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/80 space-y-3 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold uppercase tracking-wider text-slate-500 text-[11px]">
+                      Contact Details (Optional / Auto-extracted)
+                    </span>
+                    <span className="text-[10px] text-slate-400">
+                      We'll extract missing fields from your resume
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Your Full Name</label>
+                      <input
+                        type="text"
+                        value={quickName}
+                        onChange={e => setQuickName(e.target.value)}
+                        placeholder="e.g. John Doe"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">WhatsApp Phone Number</label>
+                      <input
+                        type="tel"
+                        value={quickPhone}
+                        onChange={e => setQuickPhone(e.target.value)}
+                        placeholder="e.g. 9876543210"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Email Address</label>
+                      <input
+                        type="email"
+                        value={quickEmail}
+                        onChange={e => setQuickEmail(e.target.value)}
+                        placeholder="e.g. john@gmail.com"
+                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Consent */}
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={quickConsent}
+                      onChange={e => setQuickConsent(e.target.checked)}
+                      className="mt-0.5 rounded text-brand-600 focus:ring-brand-500"
+                    />
+                    <span className="text-xs text-slate-600">
+                      I confirm that the uploaded resume belongs to me and I consent to Mastered Skill Academy processing my application for recruitment purposes.
+                    </span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={!quickResumeFile || isSubmittingQuick}
+                  className="w-full py-4 bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 text-white rounded-2xl font-bold text-base shadow-xl shadow-brand-600/30 active:scale-95 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmittingQuick ? (
+                    'Submitting Resume & Processing...'
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5" /> Submit Resume Instantly
+                    </>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleSubmit} className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-100 shadow-sm space-y-6">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Detailed Candidate Application Form</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">Please provide accurate details for screening.</p>
+                </div>
 
             {/* Hidden honeypot field for spam prevention */}
             <input
@@ -608,6 +844,8 @@ export const JobApplyPage: React.FC = () => {
           </form>
         )}
       </div>
+    )}
+  </div>
 
       {/* QR Code Modal */}
       <Modal isOpen={showQrModal} onClose={() => setShowQrModal(false)} title="Scan & Share Application Link">
