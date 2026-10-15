@@ -147,7 +147,7 @@ async function runSetup() {
       phone: '+919000000001',
       password_hash: managerPassHash,
       role: 'HR Manager',
-      must_change_password: true,
+      must_change_password: false,
       is_active: true
     }, 'setup_script');
 
@@ -178,7 +178,7 @@ async function runSetup() {
       phone: '+919000000002',
       password_hash: execPassHash,
       role: 'HR Executive',
-      must_change_password: true,
+      must_change_password: false,
       is_active: true
     }, 'setup_script');
 
@@ -209,7 +209,7 @@ async function runSetup() {
       phone: '+919000000003',
       password_hash: employeePassHash,
       role: 'Employee',
-      must_change_password: true,
+      must_change_password: false,
       is_active: true
     }, 'setup_script');
 

@@ -277,19 +277,244 @@ function saveLocalStore() {
   }
 }
 
+interface CacheEntry<T> {
+  data: T[];
+  timestamp: number;
+}
+
+const memoryCache: Map<string, CacheEntry<any>> = new Map();
+const CACHE_TTL_MS = 20 * 1000;
+
+export function isGoogleSheetsConfigured(): boolean {
+  return !!(
+    config.googleSpreadsheetId &&
+    config.googleServiceAccountEmail &&
+    config.googlePrivateKey &&
+    config.googlePrivateKey.includes('BEGIN PRIVATE KEY')
+  );
+}
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delayMs = 500): Promise<T> {
+  try {
+    return await fn();
+  } catch (err: any) {
+    const status = err?.status || err?.response?.status;
+    const isRetryable = status === 429 || (status >= 500 && status < 600) || err?.code === 'ETIMEDOUT';
+
+    if (retries > 0 && isRetryable) {
+      console.warn(`[Sheets API] Rate limit/error (${status || err?.message}). Retrying in ${delayMs}ms...`);
+      await new Promise(res => setTimeout(res, delayMs));
+      return withRetry(fn, retries - 1, delayMs * 2);
+    }
+    throw err;
+  }
+}
+
+function getColumnLetter(colIndex: number): string {
+  let letter = '';
+  while (colIndex >= 0) {
+    letter = String.fromCharCode((colIndex % 26) + 65) + letter;
+    colIndex = Math.floor(colIndex / 26) - 1;
+  }
+  return letter;
+}
+
 export async function autoSeedInitialData() {
   ensureLocalStore();
+  if (!isGoogleSheetsConfigured()) return;
+
+  try {
+    const users = await SheetsRepo.list<User>('Users');
+    if (users.length === 0) {
+      console.log('Seeding initial 3 user accounts to Google Sheets...');
+      const managerPassHash = await hashPassword(config.seedHrManagerPassword);
+      const execPassHash = await hashPassword(config.seedHrExecPassword);
+      const employeePassHash = await hashPassword(config.seedEmployeePassword);
+
+      // 1. HR Manager
+      await SheetsRepo.create<Employee>('Employees', {
+        employee_id: 'MSA-0001',
+        full_name: 'HR Administrator',
+        phone: '+919000000001',
+        email: config.seedHrManagerEmail,
+        dob: '1990-01-01',
+        gender: 'Female',
+        address: 'Kerala, India',
+        emergency_name: 'Admin Contact',
+        emergency_relation: 'Self',
+        emergency_phone: '+919000000001',
+        designation: 'HR Manager',
+        department: 'Human Resources',
+        role: 'HR Manager',
+        employment_type: 'Full-time',
+        joining_date: '2025-01-01',
+        work_location: 'Kerala Campus',
+        status: 'Active'
+      }, 'system_seed');
+
+      await SheetsRepo.create<User>('Users', {
+        employee_id: 'MSA-0001',
+        email: config.seedHrManagerEmail,
+        phone: '+919000000001',
+        password_hash: managerPassHash,
+        role: 'HR Manager',
+        must_change_password: false,
+        is_active: true
+      }, 'system_seed');
+
+      // 2. HR Executive
+      await SheetsRepo.create<Employee>('Employees', {
+        employee_id: 'MSA-0002',
+        full_name: 'Recruitment Executive',
+        phone: '+919000000002',
+        email: config.seedHrExecEmail,
+        dob: '1993-05-15',
+        gender: 'Male',
+        address: 'Kerala, India',
+        emergency_name: 'Exec Contact',
+        emergency_relation: 'Self',
+        emergency_phone: '+919000000002',
+        designation: 'HR Executive',
+        department: 'Human Resources',
+        role: 'HR Executive',
+        employment_type: 'Full-time',
+        joining_date: '2025-02-01',
+        work_location: 'Kerala Campus',
+        status: 'Active'
+      }, 'system_seed');
+
+      await SheetsRepo.create<User>('Users', {
+        employee_id: 'MSA-0002',
+        email: config.seedHrExecEmail,
+        phone: '+919000000002',
+        password_hash: execPassHash,
+        role: 'HR Executive',
+        must_change_password: false,
+        is_active: true
+      }, 'system_seed');
+
+      // 3. Employee
+      await SheetsRepo.create<Employee>('Employees', {
+        employee_id: 'MSA-0003',
+        full_name: 'Staff Member',
+        phone: '+919000000003',
+        email: config.seedEmployeeEmail,
+        dob: '1996-08-20',
+        gender: 'Female',
+        address: 'Kerala, India',
+        emergency_name: 'Staff Contact',
+        emergency_relation: 'Family',
+        emergency_phone: '+919000000003',
+        designation: 'Faculty / Trainer',
+        department: 'Academics',
+        role: 'Employee',
+        employment_type: 'Full-time',
+        joining_date: '2025-03-01',
+        work_location: 'Kerala Campus',
+        status: 'Active'
+      }, 'system_seed');
+
+      await SheetsRepo.create<User>('Users', {
+        employee_id: 'MSA-0003',
+        email: config.seedEmployeeEmail,
+        phone: '+919000000003',
+        password_hash: employeePassHash,
+        role: 'Employee',
+        must_change_password: false,
+        is_active: true
+      }, 'system_seed');
+    }
+  } catch (err) {
+    console.warn('[SheetsRepo] autoSeedInitialData notice:', (err as any)?.message);
+  }
 }
 
 export class SheetsRepo {
-  private static invalidateCache(_tabName: string) {
-    // Local in-memory sync
+  private static invalidateCache(tabName: string) {
+    memoryCache.delete(tabName);
+  }
+
+  private static parseRow<T>(tabName: string, rowValues: any[], rowIndex: number): T & { _rowIndex: number } {
+    const columns = SHEET_COLUMNS[tabName] || [];
+    const item: any = { _rowIndex: rowIndex };
+
+    columns.forEach((col, idx) => {
+      let val = rowValues[idx];
+      if (val === undefined || val === null) {
+        val = '';
+      }
+      if (val === 'TRUE' || val === 'true') val = true;
+      else if (val === 'FALSE' || val === 'false') val = false;
+
+      item[col] = val;
+    });
+
+    return item as T & { _rowIndex: number };
+  }
+
+  private static formatRow(tabName: string, item: any): any[] {
+    const columns = SHEET_COLUMNS[tabName] || [];
+    return columns.map(col => {
+      let val = item[col];
+      if (val === undefined || val === null) return '';
+      if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+      if (typeof val === 'object') return JSON.stringify(val);
+      return String(val);
+    });
   }
 
   static async list<T extends BaseEntity>(tabName: string, includeDeleted = false): Promise<T[]> {
-    const store = ensureLocalStore();
-    const items = (store[tabName] || []) as T[];
-    return includeDeleted ? [...items] : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    const now = Date.now();
+    const cached = memoryCache.get(tabName);
+
+    if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+      const items = cached.data as (T & { _rowIndex: number })[];
+      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    }
+
+    if (!isGoogleSheetsConfigured()) {
+      const store = ensureLocalStore();
+      const items = (store[tabName] || []) as T[];
+      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    }
+
+    try {
+      const sheets = getSheetsClient();
+      const spreadsheetId = config.googleSpreadsheetId;
+
+      const response = await withRetry(() =>
+        sheets.spreadsheets.values.get({
+          spreadsheetId,
+          range: `${tabName}!A2:ZZ`
+        })
+      );
+
+      const rows = response.data.values || [];
+      const items: (T & { _rowIndex: number })[] = [];
+
+      rows.forEach((row, idx) => {
+        if (!row || row.length === 0 || !row[0]) return;
+        const item = this.parseRow<T>(tabName, row, idx + 2);
+        items.push(item);
+      });
+
+      memoryCache.set(tabName, {
+        data: items,
+        timestamp: now
+      });
+
+      // Mirror to localStore
+      const store = ensureLocalStore();
+      store[tabName] = items;
+      saveLocalStore();
+
+      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    } catch (err) {
+      console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Google Sheets. Using backup:`, (err as any)?.message);
+      const store = ensureLocalStore();
+      const items = (store[tabName] || []) as T[];
+      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    }
   }
 
   static async getById<T extends BaseEntity>(tabName: string, id: string): Promise<T | null> {
@@ -321,6 +546,27 @@ export class SheetsRepo {
       is_deleted: false
     };
 
+    if (isGoogleSheetsConfigured()) {
+      try {
+        const sheets = getSheetsClient();
+        const spreadsheetId = config.googleSpreadsheetId;
+        const rowValues = this.formatRow(tabName, record);
+
+        await withRetry(() =>
+          sheets.spreadsheets.values.append({
+            spreadsheetId,
+            range: `${tabName}!A1`,
+            valueInputOption: 'USER_ENTERED',
+            requestBody: {
+              values: [rowValues]
+            }
+          })
+        );
+      } catch (err) {
+        console.warn(`[SheetsRepo] Google Sheets write error for ${tabName}:`, (err as any)?.message);
+      }
+    }
+
     const store = ensureLocalStore();
     if (!store[tabName]) store[tabName] = [];
     store[tabName].push(record);
@@ -337,9 +583,47 @@ export class SheetsRepo {
     updatedBy = 'system'
   ): Promise<T | null> {
     const nowIso = new Date().toISOString();
+    let updatedItem: any = null;
+
+    if (isGoogleSheetsConfigured()) {
+      try {
+        const sheets = getSheetsClient();
+        const spreadsheetId = config.googleSpreadsheetId;
+        const listWithRowIdx = await this.list<T & { _rowIndex: number }>(tabName, true);
+        const existing = listWithRowIdx.find(i => i.id === id);
+
+        if (existing && existing._rowIndex) {
+          updatedItem = {
+            ...existing,
+            ...data,
+            id: existing.id,
+            created_at: existing.created_at,
+            updated_at: nowIso
+          };
+
+          delete updatedItem._rowIndex;
+          const rowValues = this.formatRow(tabName, updatedItem);
+          const lastColLetter = getColumnLetter((SHEET_COLUMNS[tabName]?.length || 1) - 1);
+          const range = `${tabName}!A${existing._rowIndex}:${lastColLetter}${existing._rowIndex}`;
+
+          await withRetry(() =>
+            sheets.spreadsheets.values.update({
+              spreadsheetId,
+              range,
+              valueInputOption: 'USER_ENTERED',
+              requestBody: {
+                values: [rowValues]
+              }
+            })
+          );
+        }
+      } catch (err) {
+        console.warn(`[SheetsRepo] Google Sheets update error for ${tabName}:`, (err as any)?.message);
+      }
+    }
+
     const store = ensureLocalStore();
     if (!store[tabName]) store[tabName] = [];
-    
     const localIdx = store[tabName].findIndex((i: any) => i.id === id);
     if (localIdx >= 0) {
       store[tabName][localIdx] = {
@@ -347,12 +631,12 @@ export class SheetsRepo {
         ...data,
         updated_at: nowIso
       };
+      updatedItem = store[tabName][localIdx];
       saveLocalStore();
-      this.invalidateCache(tabName);
-      return store[tabName][localIdx] as T;
     }
 
-    return null;
+    this.invalidateCache(tabName);
+    return (updatedItem as T) || null;
   }
 
   static async softDelete<T extends BaseEntity>(tabName: string, id: string): Promise<boolean> {
