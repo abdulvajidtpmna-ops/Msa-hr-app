@@ -3,14 +3,32 @@ import {
   Users,
   Search,
   Plus,
-  Edit,
+  Edit3,
   UserX,
   FileText,
   Upload,
   Shield,
   Eye,
+  EyeOff,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Phone,
+  Mail,
+  MapPin,
+  Calendar,
+  Building,
+  Briefcase,
+  CreditCard,
+  Folder,
+  ExternalLink,
+  Clock,
+  HeartPulse,
+  Save,
+  X,
+  ShieldCheck,
+  UserCheck,
+  Palmtree,
+  Wallet
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -21,6 +39,8 @@ import { EmptyState } from '../../components/common/EmptyState';
 export const EmployeesPage: React.FC = () => {
   const { user } = useAuth();
   const isHRManager = user?.role === 'HR Manager';
+  const isHRExecutive = user?.role === 'HR Executive';
+  const canEdit = isHRManager || isHRExecutive;
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -30,6 +50,15 @@ export const EmployeesPage: React.FC = () => {
   // Selected Employee Details Modal
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [profileTab, setProfileTab] = useState<'overview' | 'personal' | 'statutory' | 'leaves' | 'documents'>('overview');
+  const [showMaskedAadhaar, setShowMaskedAadhaar] = useState(false);
+  const [showMaskedAccount, setShowMaskedAccount] = useState(false);
+
+  // Edit Employee State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Employee>>({});
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [editTab, setEditTab] = useState<'employment' | 'personal' | 'statutory'>('employment');
 
   // Create Employee Modal (HR Manager only)
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -73,10 +102,66 @@ export const EmployeesPage: React.FC = () => {
     setIsLoadingDetails(true);
     try {
       const res = await api.get<{ success: boolean; employee: Employee }>(`/employees/${id}`);
-      if (res.success) setSelectedEmployee(res.employee);
+      if (res.success) {
+        setSelectedEmployee(res.employee);
+        setProfileTab('overview');
+      }
     } catch (e) {}
     finally {
       setIsLoadingDetails(false);
+    }
+  };
+
+  const openEditModal = (emp: Employee) => {
+    setEditForm({
+      full_name: emp.full_name || '',
+      email: emp.email || '',
+      phone: emp.phone || '',
+      dob: emp.dob ? emp.dob.split('T')[0] : '',
+      gender: emp.gender || 'Other',
+      address: emp.address || '',
+      emergency_name: emp.emergency_name || '',
+      emergency_relation: emp.emergency_relation || '',
+      emergency_phone: emp.emergency_phone || '',
+      designation: emp.designation || '',
+      department: emp.department || 'Academics',
+      role: emp.role || 'Employee',
+      employment_type: emp.employment_type || 'Full-time',
+      work_location: emp.work_location || 'Kerala Campus',
+      joining_date: emp.joining_date ? emp.joining_date.split('T')[0] : '',
+      probation_end: emp.probation_end ? emp.probation_end.split('T')[0] : '',
+      reporting_manager_id: emp.reporting_manager_id || '',
+      pan: emp.pan || '',
+      aadhaar: emp.aadhaar || '',
+      bank_name: emp.bank_name || '',
+      account_no: emp.account_no || '',
+      ifsc: emp.ifsc || '',
+      uan: emp.uan || '',
+      esi_no: emp.esi_no || ''
+    });
+    setEditTab('employment');
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedEmployee) return;
+    setIsSavingEdit(true);
+
+    try {
+      const res = await api.put<{ success: boolean; message: string; employee: Employee }>(
+        `/employees/${selectedEmployee.id}`,
+        editForm
+      );
+      if (res.success) {
+        setShowEditModal(false);
+        await loadEmployeeDetails(selectedEmployee.id);
+        await fetchEmployees();
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to update employee');
+    } finally {
+      setIsSavingEdit(false);
     }
   };
 
@@ -174,14 +259,14 @@ export const EmployeesPage: React.FC = () => {
           <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
             <Users className="w-5 h-5 text-brand-600" /> Employee Directory
           </h2>
-          <p className="text-xs text-slate-500">Master record of all academy staff members and documents</p>
+          <p className="text-xs text-slate-500">Master database of all academy staff members, emergency profiles & documents</p>
         </div>
 
         {isHRManager && (
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md transition"
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md transition"
           >
             <Plus className="w-4 h-4" /> Add Employee Manually
           </button>
@@ -244,12 +329,12 @@ export const EmployeesPage: React.FC = () => {
                   <tr key={emp.id} className="hover:bg-slate-50 transition">
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-full bg-brand-100 text-brand-700 font-bold flex items-center justify-center text-xs">
+                        <div className="w-9 h-9 rounded-2xl bg-brand-100 text-brand-700 font-black flex items-center justify-center text-xs shadow-sm">
                           {emp.full_name.charAt(0)}
                         </div>
                         <div>
                           <p className="font-bold text-slate-900">{emp.full_name}</p>
-                          <p className="text-[10px] text-slate-400">{emp.employee_id}</p>
+                          <p className="text-[10px] font-mono font-bold text-brand-700">{emp.employee_id}</p>
                         </div>
                       </div>
                     </td>
@@ -260,17 +345,17 @@ export const EmployeesPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4">
-                      <span className="px-2 py-0.5 bg-slate-100 rounded text-[10px] font-bold text-slate-700">
+                      <span className="px-2.5 py-1 bg-slate-100 rounded-lg text-[10px] font-bold text-slate-700">
                         {emp.role}
                       </span>
                     </td>
 
                     <td className="py-3.5 px-4 text-slate-600">
-                      <p>{emp.phone}</p>
-                      <p className="text-[10px] text-slate-400">{emp.email}</p>
+                      <p className="font-medium">{emp.phone}</p>
+                      <p className="text-[10px] text-slate-400 truncate max-w-[140px]">{emp.email}</p>
                     </td>
 
-                    <td className="py-3.5 px-4 text-slate-600">{emp.joining_date}</td>
+                    <td className="py-3.5 px-4 text-slate-600 font-medium">{emp.joining_date ? emp.joining_date.split('T')[0] : 'N/A'}</td>
 
                     <td className="py-3.5 px-4">
                       <span
@@ -290,7 +375,7 @@ export const EmployeesPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => loadEmployeeDetails(emp.id)}
-                        className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition"
+                        className="px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-sm transition"
                       >
                         View Profile
                       </button>
@@ -303,118 +388,771 @@ export const EmployeesPage: React.FC = () => {
         )}
       </div>
 
-      {/* View Employee Detail Modal */}
+      {/* Comprehensive View Profile Modal */}
       <Modal
         isOpen={!!selectedEmployee}
         onClose={() => setSelectedEmployee(null)}
         title={selectedEmployee ? `${selectedEmployee.full_name} (${selectedEmployee.employee_id})` : 'Employee Details'}
-        maxWidth="max-w-3xl"
+        maxWidth="max-w-4xl"
       >
         {isLoadingDetails || !selectedEmployee ? (
-          <div className="py-12 text-center text-xs text-slate-500">Loading details...</div>
+          <div className="py-16 text-center text-xs text-slate-500">Loading full profile details...</div>
         ) : (
           <div className="space-y-6 text-xs">
-            {/* Action Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
-              <span className="font-bold text-slate-700">Status: {selectedEmployee.status}</span>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowUploadDocModal(true)}
-                  className="px-3 py-1.5 bg-brand-600 text-white rounded-xl font-bold text-xs"
-                >
-                  <Upload className="w-3.5 h-3.5 inline mr-1" /> Upload Document
-                </button>
-                {isHRManager && selectedEmployee.status === 'Active' && (
+            {/* Header Profile Hero Card */}
+            <div className="p-4 bg-gradient-to-r from-slate-900 via-slate-800 to-brand-950 text-white rounded-3xl shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-14 h-14 rounded-2xl bg-white/10 border border-white/20 text-white font-black text-xl flex items-center justify-center shadow-inner">
+                    {selectedEmployee.full_name.charAt(0)}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-base font-black tracking-tight">{selectedEmployee.full_name}</h3>
+                      <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-lg text-[10px] font-black">
+                        {selectedEmployee.status}
+                      </span>
+                      <span className="px-2 py-0.5 bg-white/10 rounded-lg text-[10px] font-semibold text-slate-300">
+                        {selectedEmployee.role}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-300 mt-0.5">
+                      {selectedEmployee.designation} &bull; <span className="text-brand-300 font-semibold">{selectedEmployee.department}</span>
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">ID: {selectedEmployee.employee_id}</p>
+                  </div>
+                </div>
+
+                {/* Quick Action Buttons */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {canEdit && (
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(selectedEmployee)}
+                      className="px-3.5 py-2 bg-white text-slate-900 hover:bg-slate-100 rounded-xl font-bold text-xs shadow-sm transition inline-flex items-center gap-1.5"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-brand-700" /> Edit Profile
+                    </button>
+                  )}
                   <button
                     type="button"
-                    onClick={() => setShowExitModal(true)}
-                    className="px-3 py-1.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-xl font-bold text-xs"
+                    onClick={() => setShowUploadDocModal(true)}
+                    className="px-3.5 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl font-bold text-xs shadow-sm transition inline-flex items-center gap-1.5"
                   >
-                    <UserX className="w-3.5 h-3.5 inline mr-1" /> Deactivate / Exit
+                    <Upload className="w-3.5 h-3.5" /> Upload Document
                   </button>
+                  {isHRManager && selectedEmployee.status === 'Active' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowExitModal(true)}
+                      className="px-3.5 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 rounded-xl font-bold text-xs transition inline-flex items-center gap-1.5"
+                    >
+                      <UserX className="w-3.5 h-3.5 text-rose-300" /> Exit
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Contact Strip */}
+              <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap gap-4 text-[11px] text-slate-300">
+                <a
+                  href={`tel:${selectedEmployee.phone}`}
+                  className="flex items-center gap-1.5 hover:text-white transition"
+                >
+                  <Phone className="w-3.5 h-3.5 text-brand-400" /> {selectedEmployee.phone}
+                </a>
+                <a
+                  href={`mailto:${selectedEmployee.email}`}
+                  className="flex items-center gap-1.5 hover:text-white transition"
+                >
+                  <Mail className="w-3.5 h-3.5 text-brand-400" /> {selectedEmployee.email}
+                </a>
+                <span className="flex items-center gap-1.5 text-slate-400">
+                  <MapPin className="w-3.5 h-3.5 text-brand-400" /> {selectedEmployee.work_location || 'Kerala Campus'}
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-400">
+                  <Calendar className="w-3.5 h-3.5 text-brand-400" /> Joined {selectedEmployee.joining_date ? selectedEmployee.joining_date.split('T')[0] : 'N/A'}
+                </span>
+              </div>
+            </div>
+
+            {/* Profile Navigation Tabs */}
+            <div className="flex border-b border-slate-200 gap-2 overflow-x-auto pb-1">
+              {[
+                { id: 'overview', label: 'Employment Details', icon: Briefcase },
+                { id: 'personal', label: 'Personal & Emergency', icon: Users },
+                { id: 'statutory', label: 'Statutory & Banking', icon: CreditCard },
+                { id: 'leaves', label: 'Leave Balances', icon: Palmtree },
+                { id: 'documents', label: `Documents (${selectedEmployee.documents?.length || 0})`, icon: FileText }
+              ].map(t => {
+                const Icon = t.icon;
+                const active = profileTab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setProfileTab(t.id as any)}
+                    className={`px-3.5 py-2 font-bold text-xs rounded-xl flex items-center gap-1.5 transition whitespace-nowrap ${
+                      active
+                        ? 'bg-brand-50 text-brand-700 border border-brand-200 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" /> {t.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* TAB 1: EMPLOYMENT DETAILS */}
+            {profileTab === 'overview' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employee ID</span>
+                    <p className="font-mono font-bold text-slate-900 mt-1">{selectedEmployee.employee_id}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Designation</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.designation}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Department</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.department}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Employment Type</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.employment_type || 'Full-time'}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Role Access Level</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.role}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date of Joining</span>
+                    <p className="font-bold text-slate-900 mt-1">
+                      {selectedEmployee.joining_date ? selectedEmployee.joining_date.split('T')[0] : 'N/A'}
+                    </p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Work Location / Campus</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.work_location || 'Kerala Campus'}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Reporting Manager</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.reporting_manager_name || selectedEmployee.reporting_manager_id || 'Top Management'}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Probation End Date</span>
+                    <p className="font-bold text-slate-900 mt-1">
+                      {selectedEmployee.probation_end ? selectedEmployee.probation_end.split('T')[0] : 'Completed / Confirmed'}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedEmployee.status !== 'Active' && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-1">
+                    <p className="font-bold text-rose-800">Exit Information</p>
+                    <p className="text-rose-700"><strong>Exit Date:</strong> {selectedEmployee.exit_date ? selectedEmployee.exit_date.split('T')[0] : 'N/A'}</p>
+                    <p className="text-rose-700"><strong>Reason:</strong> {selectedEmployee.exit_reason || 'N/A'}</p>
+                  </div>
                 )}
               </div>
-            </div>
+            )}
 
-            {/* Profile Summary */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="p-3 bg-white rounded-2xl border border-slate-100">
-                <span className="text-slate-400 font-semibold">Designation</span>
-                <p className="font-bold text-slate-900 mt-0.5">{selectedEmployee.designation}</p>
-              </div>
-              <div className="p-3 bg-white rounded-2xl border border-slate-100">
-                <span className="text-slate-400 font-semibold">Department</span>
-                <p className="font-bold text-slate-900 mt-0.5">{selectedEmployee.department}</p>
-              </div>
-              <div className="p-3 bg-white rounded-2xl border border-slate-100">
-                <span className="text-slate-400 font-semibold">Role Access</span>
-                <p className="font-bold text-slate-900 mt-0.5">{selectedEmployee.role}</p>
-              </div>
-              <div className="p-3 bg-white rounded-2xl border border-slate-100">
-                <span className="text-slate-400 font-semibold">Phone</span>
-                <p className="font-bold text-slate-900 mt-0.5">{selectedEmployee.phone}</p>
-              </div>
-              <div className="p-3 bg-white rounded-2xl border border-slate-100">
-                <span className="text-slate-400 font-semibold">Email</span>
-                <p className="font-bold text-slate-900 mt-0.5 truncate">{selectedEmployee.email}</p>
-              </div>
-              <div className="p-3 bg-white rounded-2xl border border-slate-100">
-                <span className="text-slate-400 font-semibold">Location</span>
-                <p className="font-bold text-slate-900 mt-0.5">{selectedEmployee.work_location || 'Kerala'}</p>
-              </div>
-            </div>
+            {/* TAB 2: PERSONAL & EMERGENCY */}
+            {profileTab === 'personal' && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date of Birth</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.dob ? selectedEmployee.dob.split('T')[0] : 'Not specified'}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gender</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.gender || 'Not specified'}</p>
+                  </div>
+                  <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Primary Phone</span>
+                    <p className="font-bold text-slate-900 mt-1">{selectedEmployee.phone}</p>
+                  </div>
+                </div>
 
-            {/* Bank and Statutory (Visible to HR Manager) */}
-            {isHRManager && (
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
-                <h4 className="font-bold text-slate-500 uppercase tracking-wider text-[10px]">
-                  Statutory & Banking Details (Confidential)
-                </h4>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-slate-700">
-                  <p><strong>PAN:</strong> {selectedEmployee.pan || 'N/A'}</p>
-                  <p><strong>Bank:</strong> {selectedEmployee.bank_name || 'N/A'}</p>
-                  <p><strong>Account:</strong> {selectedEmployee.account_no || 'N/A'}</p>
-                  <p><strong>IFSC:</strong> {selectedEmployee.ifsc || 'N/A'}</p>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Residential Address</span>
+                  <p className="font-bold text-slate-800 mt-1 text-xs leading-relaxed">{selectedEmployee.address || 'Address not updated'}</p>
+                </div>
+
+                {/* Emergency Contact Card */}
+                <div className="p-4 bg-amber-50/60 border border-amber-200/80 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-amber-900 font-bold">
+                    <HeartPulse className="w-4 h-4 text-amber-600" /> Emergency Contact Profile
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mt-2">
+                    <div>
+                      <span className="text-amber-800/70 text-[10px] font-semibold">Contact Person</span>
+                      <p className="font-bold text-amber-950 mt-0.5">{selectedEmployee.emergency_name || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <span className="text-amber-800/70 text-[10px] font-semibold">Relationship</span>
+                      <p className="font-bold text-amber-950 mt-0.5">{selectedEmployee.emergency_relation || 'Not provided'}</p>
+                    </div>
+                    <div>
+                      <span className="text-amber-800/70 text-[10px] font-semibold">Emergency Phone</span>
+                      <p className="font-bold text-amber-950 mt-0.5">
+                        {selectedEmployee.emergency_phone ? (
+                          <a href={`tel:${selectedEmployee.emergency_phone}`} className="underline hover:text-amber-700">
+                            {selectedEmployee.emergency_phone}
+                          </a>
+                        ) : 'Not provided'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Uploaded Documents List */}
-            <div className="space-y-2">
-              <h4 className="font-bold text-slate-400 uppercase tracking-wider text-[10px]">
-                Uploaded Verified Documents (Drive)
-              </h4>
-              {!selectedEmployee.documents || selectedEmployee.documents.length === 0 ? (
-                <p className="text-slate-400 italic">No documents uploaded yet.</p>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {selectedEmployee.documents.map((doc: EmployeeDoc) => (
-                    <div key={doc.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200/60 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-brand-600" />
-                        <div>
-                          <p className="font-bold text-slate-800 uppercase text-[10px]">{doc.doc_type}</p>
-                          <p className="text-[10px] text-slate-500 truncate max-w-[150px]">{doc.file_name}</p>
-                        </div>
-                      </div>
-                      {doc.drive_file_id && (
-                        <a
-                          href={`/api/files/stream/${doc.drive_file_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-2 py-1 bg-white text-brand-700 rounded-lg text-[10px] font-bold border border-slate-200"
-                        >
-                          View File
-                        </a>
-                      )}
-                    </div>
-                  ))}
+            {/* TAB 3: STATUTORY & BANKING */}
+            {profileTab === 'statutory' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 bg-slate-100/70 rounded-2xl text-[11px] text-slate-600">
+                  <span className="flex items-center gap-1.5 font-bold">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" /> Confidential Statutory & Payroll Data
+                  </span>
+                  <span className="text-slate-400 text-[10px]">Restricted to HR Management</span>
                 </div>
-              )}
-            </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Identity Card Numbers */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                    <h4 className="font-bold text-slate-900 text-xs">National Identification</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">PAN Card Number</span>
+                        <p className="font-mono font-bold text-slate-800 text-sm">{selectedEmployee.pan || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">Aadhaar Number</span>
+                          {selectedEmployee.aadhaar && (
+                            <button
+                              type="button"
+                              onClick={() => setShowMaskedAadhaar(!showMaskedAadhaar)}
+                              className="text-[10px] font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1"
+                            >
+                              {showMaskedAadhaar ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                              {showMaskedAadhaar ? 'Hide' : 'Show'}
+                            </button>
+                          )}
+                        </div>
+                        <p className="font-mono font-bold text-slate-800 text-sm">
+                          {selectedEmployee.aadhaar
+                            ? showMaskedAadhaar
+                              ? selectedEmployee.aadhaar
+                              : `XXXX-XXXX-${selectedEmployee.aadhaar.slice(-4)}`
+                            : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Social Security & Insurance */}
+                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                    <h4 className="font-bold text-slate-900 text-xs">Provident Fund & ESI</h4>
+                    <div className="space-y-2">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">UAN (Universal Account Number)</span>
+                        <p className="font-mono font-bold text-slate-800 text-sm">{selectedEmployee.uan || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">ESI Registration Number</span>
+                        <p className="font-mono font-bold text-slate-800 text-sm">{selectedEmployee.esi_no || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bank Account Information */}
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                  <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                    <Wallet className="w-4 h-4 text-brand-600" /> Bank Disbursement Account
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Bank Name</span>
+                      <p className="font-bold text-slate-800 mt-0.5">{selectedEmployee.bank_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Account Number</span>
+                        {selectedEmployee.account_no && (
+                          <button
+                            type="button"
+                            onClick={() => setShowMaskedAccount(!showMaskedAccount)}
+                            className="text-[10px] font-bold text-brand-600 hover:text-brand-800 flex items-center gap-1"
+                          >
+                            {showMaskedAccount ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          </button>
+                        )}
+                      </div>
+                      <p className="font-mono font-bold text-slate-800 mt-0.5">
+                        {selectedEmployee.account_no
+                          ? showMaskedAccount
+                            ? selectedEmployee.account_no
+                            : `••••••••${selectedEmployee.account_no.slice(-4)}`
+                          : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">IFSC Code</span>
+                      <p className="font-mono font-bold text-slate-800 mt-0.5">{selectedEmployee.ifsc || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">Status</span>
+                      <p className="font-bold text-emerald-600 mt-0.5">Direct Deposit Verified</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: LEAVE BALANCES */}
+            {profileTab === 'leaves' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-900 text-xs">Annual Leave Quotas & Current Balances</h4>
+                  <span className="text-[10px] text-slate-400">Year {new Date().getFullYear()}</span>
+                </div>
+
+                {!selectedEmployee.leave_balances || selectedEmployee.leave_balances.length === 0 ? (
+                  <p className="text-slate-400 italic">No leave quotas configured for this role.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {selectedEmployee.leave_balances.map(lb => {
+                      const pctUsed = Math.min(100, Math.round((lb.used / (lb.yearly_quota || 1)) * 100));
+                      return (
+                        <div key={lb.name} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="font-bold text-slate-800">{lb.name}</span>
+                            <span className="font-bold text-brand-700 font-mono text-sm">{lb.balance} Left</span>
+                          </div>
+                          <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                            <div className="bg-brand-600 h-full rounded-full" style={{ width: `${pctUsed}%` }}></div>
+                          </div>
+                          <div className="flex justify-between text-[10px] text-slate-400 font-medium">
+                            <span>Used: {lb.used} days</span>
+                            <span>Total Quota: {lb.yearly_quota} days</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 5: DOCUMENTS & DRIVE */}
+            {profileTab === 'documents' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-900 text-xs">Verified Google Drive Documents</h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowUploadDocModal(true)}
+                    className="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl font-bold text-xs inline-flex items-center gap-1 shadow-sm transition"
+                  >
+                    <Upload className="w-3.5 h-3.5" /> Upload New
+                  </button>
+                </div>
+
+                {!selectedEmployee.documents || selectedEmployee.documents.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-slate-500 font-medium text-xs">No documents uploaded to Google Drive yet.</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowUploadDocModal(true)}
+                      className="mt-3 px-3 py-1.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold rounded-xl text-xs"
+                    >
+                      Upload First Document
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {selectedEmployee.documents.map((doc: EmployeeDoc) => (
+                      <div key={doc.id} className="p-3.5 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200/70 flex items-center justify-between transition">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-brand-100 text-brand-700 flex items-center justify-center">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-800 uppercase text-[10px] tracking-wide">{doc.doc_type.replace(/_/g, ' ')}</p>
+                            <p className="text-[10px] text-slate-500 truncate max-w-[170px]">{doc.file_name}</p>
+                          </div>
+                        </div>
+                        {doc.drive_file_id && (
+                          <a
+                            href={`/api/files/stream/${doc.drive_file_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1 bg-white hover:bg-brand-50 text-brand-700 rounded-lg text-[10px] font-bold border border-slate-200 shadow-xs flex items-center gap-1"
+                          >
+                            <ExternalLink className="w-3 h-3" /> View
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
+      </Modal>
+
+      {/* Edit Employee Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title={selectedEmployee ? `Edit Profile - ${selectedEmployee.full_name} (${selectedEmployee.employee_id})` : 'Edit Employee Profile'}
+        maxWidth="max-w-3xl"
+      >
+        <form onSubmit={handleSaveEdit} className="space-y-4 text-xs">
+          {/* Edit Tabs */}
+          <div className="flex border-b border-slate-200 gap-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setEditTab('employment')}
+              className={`px-3 py-1.5 font-bold rounded-xl ${editTab === 'employment' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              💼 Employment
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditTab('personal')}
+              className={`px-3 py-1.5 font-bold rounded-xl ${editTab === 'personal' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              👤 Personal & Emergency
+            </button>
+            <button
+              type="button"
+              onClick={() => setEditTab('statutory')}
+              className={`px-3 py-1.5 font-bold rounded-xl ${editTab === 'statutory' ? 'bg-brand-50 text-brand-700 border border-brand-200' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              🏛️ Banking & Statutory
+            </button>
+          </div>
+
+          {/* EDIT SECTION 1: EMPLOYMENT */}
+          {editTab === 'employment' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.full_name || ''}
+                    onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Official Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={editForm.email || ''}
+                    onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Designation *</label>
+                  <input
+                    type="text"
+                    required
+                    value={editForm.designation || ''}
+                    onChange={e => setEditForm({ ...editForm, designation: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Department</label>
+                  <select
+                    value={editForm.department || 'Academics'}
+                    onChange={e => setEditForm({ ...editForm, department: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                  >
+                    <option value="Academics">Academics</option>
+                    <option value="Human Resources">Human Resources</option>
+                    <option value="Administration">Administration</option>
+                    <option value="Marketing">Marketing</option>
+                    <option value="Operations">Operations</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Role Access</label>
+                  <select
+                    value={editForm.role || 'Employee'}
+                    onChange={e => setEditForm({ ...editForm, role: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                  >
+                    <option value="Employee">Employee</option>
+                    <option value="HR Executive">HR Executive</option>
+                    <option value="HR Manager">HR Manager</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Employment Type</label>
+                  <select
+                    value={editForm.employment_type || 'Full-time'}
+                    onChange={e => setEditForm({ ...editForm, employment_type: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                  >
+                    <option value="Full-time">Full-time</option>
+                    <option value="Part-time">Part-time</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Intern">Intern</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Work Location</label>
+                  <input
+                    type="text"
+                    value={editForm.work_location || 'Kerala Campus'}
+                    onChange={e => setEditForm({ ...editForm, work_location: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Date of Joining</label>
+                  <input
+                    type="date"
+                    value={editForm.joining_date || ''}
+                    onChange={e => setEditForm({ ...editForm, joining_date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Probation End Date</label>
+                  <input
+                    type="date"
+                    value={editForm.probation_end || ''}
+                    onChange={e => setEditForm({ ...editForm, probation_end: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Reporting Manager ID</label>
+                  <input
+                    type="text"
+                    value={editForm.reporting_manager_id || ''}
+                    onChange={e => setEditForm({ ...editForm, reporting_manager_id: e.target.value })}
+                    placeholder="e.g. MSA-0001"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EDIT SECTION 2: PERSONAL & EMERGENCY */}
+          {editTab === 'personal' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Primary Phone *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={editForm.phone || ''}
+                    onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={editForm.dob || ''}
+                    onChange={e => setEditForm({ ...editForm, dob: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Gender</label>
+                  <select
+                    value={editForm.gender || 'Other'}
+                    onChange={e => setEditForm({ ...editForm, gender: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Full Residential Address</label>
+                <textarea
+                  rows={2}
+                  value={editForm.address || ''}
+                  onChange={e => setEditForm({ ...editForm, address: e.target.value })}
+                  placeholder="Street, City, District, PIN code"
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 space-y-2">
+                <span className="font-bold text-amber-900 text-[11px] block">Emergency Contact</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Person Name</label>
+                    <input
+                      type="text"
+                      value={editForm.emergency_name || ''}
+                      onChange={e => setEditForm({ ...editForm, emergency_name: e.target.value })}
+                      placeholder="e.g. Spouse / Father"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Relationship</label>
+                    <input
+                      type="text"
+                      value={editForm.emergency_relation || ''}
+                      onChange={e => setEditForm({ ...editForm, emergency_relation: e.target.value })}
+                      placeholder="e.g. Mother / Sibling"
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-0.5">Emergency Phone</label>
+                    <input
+                      type="tel"
+                      value={editForm.emergency_phone || ''}
+                      onChange={e => setEditForm({ ...editForm, emergency_phone: e.target.value })}
+                      placeholder="+91..."
+                      className="w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* EDIT SECTION 3: STATUTORY & BANKING */}
+          {editTab === 'statutory' && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">PAN Card Number</label>
+                  <input
+                    type="text"
+                    value={editForm.pan || ''}
+                    onChange={e => setEditForm({ ...editForm, pan: e.target.value.toUpperCase() })}
+                    placeholder="ABCDE1234F"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Aadhaar Number (12 Digits)</label>
+                  <input
+                    type="text"
+                    value={editForm.aadhaar || ''}
+                    onChange={e => setEditForm({ ...editForm, aadhaar: e.target.value })}
+                    placeholder="12-digit number"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Bank Name</label>
+                  <input
+                    type="text"
+                    value={editForm.bank_name || ''}
+                    onChange={e => setEditForm({ ...editForm, bank_name: e.target.value })}
+                    placeholder="e.g. State Bank of India / HDFC"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Bank Account Number</label>
+                  <input
+                    type="text"
+                    value={editForm.account_no || ''}
+                    onChange={e => setEditForm({ ...editForm, account_no: e.target.value })}
+                    placeholder="Account number"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">IFSC Code</label>
+                  <input
+                    type="text"
+                    value={editForm.ifsc || ''}
+                    onChange={e => setEditForm({ ...editForm, ifsc: e.target.value.toUpperCase() })}
+                    placeholder="SBIN0001234"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">PF / UAN Number</label>
+                  <input
+                    type="text"
+                    value={editForm.uan || ''}
+                    onChange={e => setEditForm({ ...editForm, uan: e.target.value })}
+                    placeholder="12-digit UAN"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ESI Registration No</label>
+                  <input
+                    type="text"
+                    value={editForm.esi_no || ''}
+                    onChange={e => setEditForm({ ...editForm, esi_no: e.target.value })}
+                    placeholder="17-digit ESI number"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-mono font-bold"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-xs transition"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isSavingEdit}
+              className="px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl text-xs shadow-md transition disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              <Save className="w-4 h-4" /> {isSavingEdit ? 'Saving to Database...' : 'Save & Update in Google Sheets'}
+            </button>
+          </div>
+        </form>
       </Modal>
 
       {/* Create Employee Modal */}
@@ -477,6 +1215,7 @@ export const EmployeesPage: React.FC = () => {
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
               >
                 <option value="Academics">Academics</option>
+                <option value="Human Resources">Human Resources</option>
                 <option value="Administration">Administration</option>
                 <option value="Marketing">Marketing</option>
                 <option value="Operations">Operations</option>

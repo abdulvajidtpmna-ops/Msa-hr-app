@@ -84,11 +84,64 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     const docs = await SheetsRepo.find<EmployeeDoc>('EmployeeDocs', d => d.employee_id === emp.employee_id);
 
-    // Filter sensitive bank/statutory details
+    // Decrypt confidential fields if HR Manager or Self
+    let decryptedAadhaar = emp.aadhaar_enc || '';
+    let decryptedAccount = emp.account_no_enc || '';
+    if (isManager || isSelf) {
+      if (emp.aadhaar_enc) {
+        try { decryptedAadhaar = decrypt(emp.aadhaar_enc); } catch (e) { decryptedAadhaar = emp.aadhaar_enc; }
+      }
+      if (emp.account_no_enc) {
+        try { decryptedAccount = decrypt(emp.account_no_enc); } catch (e) { decryptedAccount = emp.account_no_enc; }
+      }
+    }
+
+    // Resolve Reporting Manager Name
+    let reportingManagerName = '';
+    if (emp.reporting_manager_id) {
+      const mgr = list.find(m => m.employee_id === emp.reporting_manager_id || m.id === emp.reporting_manager_id);
+      if (mgr) reportingManagerName = `${mgr.full_name} (${mgr.employee_id})`;
+    }
+
+    // Fetch Leave Balances & Types
+    let leaveBalancesList: any[] = [];
+    try {
+      const [leaveBalances, leaveTypes] = await Promise.all([
+        SheetsRepo.find<any>('LeaveBalances', b => b.employee_id === emp.employee_id),
+        SheetsRepo.list<any>('LeaveTypes')
+      ]);
+
+      leaveBalancesList = leaveTypes.map(lt => {
+        const bal = leaveBalances.find(b => b.leave_type_id === lt.id || b.leave_type_id === lt.name);
+        const used = bal ? Number(bal.used) || 0 : 0;
+        const total = Number(lt.yearly_quota) || 12;
+        return {
+          name: lt.name,
+          yearly_quota: total,
+          used,
+          balance: bal && bal.balance !== undefined ? Number(bal.balance) : Math.max(0, total - used)
+        };
+      });
+    } catch (e) {}
+
+    // Fetch Active Salary Structure (if Manager or Self)
+    let salaryStructure: any = null;
+    if (isManager || isSelf) {
+      try {
+        const salaries = await SheetsRepo.find<any>('SalaryStructures', s => s.employee_id === emp.employee_id);
+        if (salaries.length > 0) {
+          salaryStructure = salaries[salaries.length - 1];
+        }
+      } catch (e) {}
+    }
+
     const result: any = {
       ...emp,
-      aadhaar: isManager && emp.aadhaar_enc ? maskSensitive(decrypt(emp.aadhaar_enc), 4) : undefined,
-      account_no: isManager && emp.account_no_enc ? maskSensitive(decrypt(emp.account_no_enc), 4) : undefined,
+      reporting_manager_name: reportingManagerName,
+      aadhaar: (isManager || isSelf) ? decryptedAadhaar : undefined,
+      account_no: (isManager || isSelf) ? decryptedAccount : undefined,
+      salary_structure: salaryStructure,
+      leave_balances: leaveBalancesList,
       documents: docs.filter(d => {
         if (isManager || isSelf) return true;
         // HR Exec cannot see bank documents
@@ -180,7 +233,8 @@ router.put('/:id', async (req: Request, res: Response) => {
     const userRole = req.user!.role;
     const currentEmpId = req.user!.employeeId;
 
-    const emp = await SheetsRepo.getById<Employee>('Employees', id);
+    const empList = await SheetsRepo.list<Employee>('Employees');
+    const emp = empList.find(e => e.id === id || e.employee_id === id);
     if (!emp) {
       return res.status(404).json({ success: false, message: 'Employee not found' });
     }
@@ -226,8 +280,8 @@ router.put('/:id', async (req: Request, res: Response) => {
       if (body.esi_no !== undefined) updatePayload.esi_no = body.esi_no;
     }
 
-    const updated = await SheetsRepo.update<Employee>('Employees', id, updatePayload, req.user!.employeeId);
-    await AuditService.log(req.user!.employeeId, 'UPDATE_EMPLOYEE', 'Employees', id, emp, updated, req.ip);
+    const updated = await SheetsRepo.update<Employee>('Employees', emp.id, updatePayload, req.user!.employeeId);
+    await AuditService.log(req.user!.employeeId, 'UPDATE_EMPLOYEE', 'Employees', emp.id, emp, updated, req.ip);
 
     return res.json({ success: true, message: 'Employee updated successfully', employee: updated });
   } catch (err: any) {

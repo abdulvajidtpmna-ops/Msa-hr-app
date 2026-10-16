@@ -32,6 +32,7 @@ export interface Employee {
   employment_type: string;
   joining_date: string;
   reporting_manager_id?: string;
+  reporting_manager_name?: string;
   work_location: string;
   probation_end?: string;
   status: 'Active' | 'Probation' | 'Notice' | 'Resigned' | 'Terminated';
@@ -42,7 +43,26 @@ export interface Employee {
   ifsc?: string;
   uan?: string;
   esi_no?: string;
+  drive_folder_id?: string;
+  exit_date?: string;
+  exit_reason?: string;
   documents?: EmployeeDoc[];
+  salary_structure?: {
+    basic?: number;
+    hra?: number;
+    allowances_json?: string;
+    deductions_json?: string;
+    pf_enabled?: boolean;
+    esi_enabled?: boolean;
+    pt_enabled?: boolean;
+    overtime_rate?: number;
+  };
+  leave_balances?: {
+    name: string;
+    yearly_quota: number;
+    used: number;
+    balance: number;
+  }[];
 }
 
 export interface EmployeeDoc {
