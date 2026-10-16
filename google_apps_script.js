@@ -23,7 +23,7 @@
 // 23 Data Tables for Complete MSA HR Platform
 var SHEET_COLUMNS = {
   Users: ['employee_id', 'email', 'phone', 'password_hash', 'role', 'must_change_password', 'is_active', 'last_login', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
-  Employees: ['employee_id', 'full_name', 'photo_url', 'phone', 'email', 'dob', 'gender', 'blood_group', 'address', 'emergency_name', 'emergency_relation', 'emergency_phone', 'designation', 'department', 'role', 'employment_type', 'joining_date', 'reporting_manager_id', 'work_location', 'probation_end', 'status', 'pan', 'aadhaar_enc', 'bank_name', 'account_no_enc', 'ifsc', 'uan', 'esi_no', 'exit_date', 'exit_reason', 'drive_folder_id', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
+  Employees: ['employee_id', 'full_name', 'photo_url', 'phone', 'email', 'dob', 'gender', 'address', 'emergency_name', 'emergency_relation', 'emergency_phone', 'designation', 'department', 'role', 'employment_type', 'joining_date', 'reporting_manager_id', 'work_location', 'probation_end', 'status', 'pan', 'aadhaar_enc', 'bank_name', 'account_no_enc', 'ifsc', 'uan', 'esi_no', 'exit_date', 'exit_reason', 'drive_folder_id', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted', 'blood_group'],
   EmployeeDocs: ['employee_id', 'doc_type', 'file_name', 'drive_file_id', 'drive_url', 'uploaded_by', 'verified', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Jobs: ['title', 'slug', 'department', 'location', 'type', 'vacancies', 'description', 'responsibilities', 'qualification', 'min_experience', 'required_skills', 'preferred_skills', 'salary_range', 'last_date', 'status', 'form_config_json', 'criteria_json', 'threshold', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Applications: ['job_id', 'ref_no', 'full_name', 'phone', 'email', 'dob', 'gender', 'location', 'qualification', 'specialization', 'experience_years', 'current_employer', 'skills', 'current_salary', 'expected_salary', 'notice_period', 'why_join', 'custom_answers_json', 'resume_drive_id', 'photo_drive_id', 'score', 'score_breakdown_json', 'status', 'hr_notes', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
@@ -297,7 +297,19 @@ function doPost(e) {
 }
 
 /**
- * Lists rows of a tab as JSON objects
+ * Formats table header row with brand colors
+ */
+function formatHeaderRow(sheet, colCount) {
+  if (!sheet || !colCount) return;
+  var headerRange = sheet.getRange(1, 1, 1, colCount);
+  headerRange.setBackground('#166534'); // MSA Brand Emerald Green
+  headerRange.setFontColor('#FFFFFF');
+  headerRange.setFontWeight('bold');
+  sheet.setFrozenRows(1);
+}
+
+/**
+ * Lists rows of a tab as JSON objects dynamically matching header columns
  */
 function listTabRecords(tabName) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -308,8 +320,9 @@ function listTabRecords(tabName) {
   var lastCol = sheet.getLastColumn();
   if (lastRow <= 1 || lastCol === 0) return [];
   
+  var headerRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var columns = (headerRow.length > 0 && headerRow[0] !== '') ? headerRow : (SHEET_COLUMNS[tabName] || []);
   var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
-  var columns = SHEET_COLUMNS[tabName] || [];
   
   var items = [];
   for (var r = 0; r < values.length; r++) {
@@ -319,6 +332,7 @@ function listTabRecords(tabName) {
     var obj = { _rowIndex: r + 2 };
     for (var c = 0; c < columns.length; c++) {
       var key = columns[c];
+      if (!key) continue;
       var cellVal = row[c];
       
       if (cellVal === undefined || cellVal === null) cellVal = '';
@@ -333,23 +347,53 @@ function listTabRecords(tabName) {
 }
 
 /**
- * Appends record into tab
+ * Appends record into tab with dynamic column expansion
  */
 function createTabRecord(tabName, itemData) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(tabName);
+  var defaultCols = SHEET_COLUMNS[tabName] || (itemData ? Object.keys(itemData) : []);
+  if (!defaultCols || defaultCols.length === 0) {
+    defaultCols = ['id', 'created_at', 'updated_at', 'created_by', 'is_deleted'];
+  }
+
   if (!sheet) {
     sheet = ss.insertSheet(tabName);
-    var cols = SHEET_COLUMNS[tabName] || [];
-    sheet.getRange(1, 1, 1, cols.length).setValues([cols]);
+    sheet.getRange(1, 1, 1, defaultCols.length).setValues([defaultCols]);
+    formatHeaderRow(sheet, defaultCols.length);
   }
   
-  var columns = SHEET_COLUMNS[tabName] || [];
-  var rowValues = [];
+  var lastCol = sheet.getLastColumn();
+  var headers = [];
+  if (lastCol > 0) {
+    headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  }
+  if (!headers || headers.length === 0 || headers[0] === '') {
+    sheet.getRange(1, 1, 1, defaultCols.length).setValues([defaultCols]);
+    formatHeaderRow(sheet, defaultCols.length);
+    headers = defaultCols;
+    lastCol = headers.length;
+  }
   
-  for (var i = 0; i < columns.length; i++) {
-    var col = columns[i];
-    var val = itemData[col];
+  // Auto-expand headers if itemData has any keys not in headers
+  if (itemData) {
+    var newKeys = [];
+    var itemKeys = Object.keys(itemData);
+    for (var k = 0; k < itemKeys.length; k++) {
+      if (headers.indexOf(itemKeys[k]) === -1) {
+        newKeys.push(itemKeys[k]);
+      }
+    }
+    if (newKeys.length > 0) {
+      sheet.getRange(1, lastCol + 1, 1, newKeys.length).setValues([newKeys]);
+      headers = headers.concat(newKeys);
+    }
+  }
+  
+  var rowValues = [];
+  for (var i = 0; i < headers.length; i++) {
+    var col = headers[i];
+    var val = itemData ? itemData[col] : '';
     if (val === undefined || val === null) val = '';
     else if (typeof val === 'boolean') val = val ? 'TRUE' : 'FALSE';
     else if (typeof val === 'object') val = JSON.stringify(val);
@@ -362,7 +406,7 @@ function createTabRecord(tabName, itemData) {
 }
 
 /**
- * Updates existing record by ID
+ * Updates existing record by ID with auto-expanding header support
  */
 function updateTabRecord(tabName, id, updates) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -371,21 +415,47 @@ function updateTabRecord(tabName, id, updates) {
   
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
-  if (lastRow <= 1) return null;
+  if (lastRow <= 1 || lastCol === 0) return null;
   
-  var columns = SHEET_COLUMNS[tabName] || [];
-  var idColIdx = columns.indexOf('id');
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  
+  // Auto-expand headers if updates contains a new column not yet in sheet
+  if (updates) {
+    var updateKeys = Object.keys(updates);
+    var missingKeys = [];
+    for (var u = 0; u < updateKeys.length; u++) {
+      if (headers.indexOf(updateKeys[u]) === -1) {
+        missingKeys.push(updateKeys[u]);
+      }
+    }
+    if (missingKeys.length > 0) {
+      sheet.getRange(1, lastCol + 1, 1, missingKeys.length).setValues([missingKeys]);
+      headers = headers.concat(missingKeys);
+      lastCol = headers.length;
+    }
+  }
+  
+  var idColIdx = headers.indexOf('id');
+  if (idColIdx === -1) idColIdx = headers.indexOf('employee_id');
   if (idColIdx === -1) idColIdx = 0;
   
   var values = sheet.getRange(2, 1, lastRow - 1, lastCol).getValues();
   for (var r = 0; r < values.length; r++) {
-    if (String(values[r][idColIdx]) === String(id)) {
+    var rowValId = String(values[r][idColIdx]);
+    var empColIdx = headers.indexOf('employee_id');
+    var rowEmpId = empColIdx !== -1 ? String(values[r][empColIdx]) : '';
+    
+    if (rowValId === String(id) || (rowEmpId && rowEmpId === String(id))) {
       var targetRow = r + 2;
       var currentRowData = values[r];
       
-      for (var c = 0; c < columns.length; c++) {
-        var col = columns[c];
-        if (updates[col] !== undefined) {
+      while (currentRowData.length < headers.length) {
+        currentRowData.push('');
+      }
+      
+      for (var c = 0; c < headers.length; c++) {
+        var col = headers[c];
+        if (updates && updates[col] !== undefined) {
           var val = updates[col];
           if (val === undefined || val === null) val = '';
           else if (typeof val === 'boolean') val = val ? 'TRUE' : 'FALSE';
@@ -395,7 +465,7 @@ function updateTabRecord(tabName, id, updates) {
         }
       }
       
-      sheet.getRange(targetRow, 1, 1, columns.length).setValues([currentRowData]);
+      sheet.getRange(targetRow, 1, 1, headers.length).setValues([currentRowData]);
       return updates;
     }
   }
@@ -408,6 +478,7 @@ function updateTabRecord(tabName, id, updates) {
 function deleteTabRecord(tabName, id) {
   return !!updateTabRecord(tabName, id, { is_deleted: 'TRUE' });
 }
+
 
 /**
  * Uploads a base64 encoded file into target Google Drive folder

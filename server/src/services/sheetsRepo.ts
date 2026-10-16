@@ -8,7 +8,7 @@ import { hashPassword } from '../utils/crypto';
 
 export const SHEET_COLUMNS: Record<string, string[]> = {
   Users: ['employee_id', 'email', 'phone', 'password_hash', 'role', 'must_change_password', 'is_active', 'last_login', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
-  Employees: ['employee_id', 'full_name', 'photo_url', 'phone', 'email', 'dob', 'gender', 'blood_group', 'address', 'emergency_name', 'emergency_relation', 'emergency_phone', 'designation', 'department', 'role', 'employment_type', 'joining_date', 'reporting_manager_id', 'work_location', 'probation_end', 'status', 'pan', 'aadhaar_enc', 'bank_name', 'account_no_enc', 'ifsc', 'uan', 'esi_no', 'exit_date', 'exit_reason', 'drive_folder_id', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
+  Employees: ['employee_id', 'full_name', 'photo_url', 'phone', 'email', 'dob', 'gender', 'address', 'emergency_name', 'emergency_relation', 'emergency_phone', 'designation', 'department', 'role', 'employment_type', 'joining_date', 'reporting_manager_id', 'work_location', 'probation_end', 'status', 'pan', 'aadhaar_enc', 'bank_name', 'account_no_enc', 'ifsc', 'uan', 'esi_no', 'exit_date', 'exit_reason', 'drive_folder_id', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted', 'blood_group'],
   EmployeeDocs: ['employee_id', 'doc_type', 'file_name', 'drive_file_id', 'drive_url', 'uploaded_by', 'verified', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Jobs: ['title', 'slug', 'department', 'location', 'type', 'vacancies', 'description', 'responsibilities', 'qualification', 'min_experience', 'required_skills', 'preferred_skills', 'salary_range', 'last_date', 'status', 'form_config_json', 'criteria_json', 'threshold', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Applications: ['job_id', 'ref_no', 'full_name', 'phone', 'email', 'dob', 'gender', 'location', 'qualification', 'specialization', 'experience_years', 'current_employer', 'skills', 'current_salary', 'expected_salary', 'notice_period', 'why_join', 'custom_answers_json', 'resume_drive_id', 'photo_drive_id', 'score', 'score_breakdown_json', 'status', 'hr_notes', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
@@ -495,6 +495,157 @@ export class SheetsRepo {
     memoryCache.delete(tabName);
   }
 
+  private static updateCacheItem(tabName: string, record: any, isNew = false) {
+    const cached = memoryCache.get(tabName);
+    if (!cached || !Array.isArray(cached.data)) {
+      memoryCache.set(tabName, { data: [record], timestamp: Date.now() });
+      return;
+    }
+    const idx = cached.data.findIndex((i: any) => i.id === record.id);
+    if (idx >= 0) {
+      cached.data[idx] = { ...cached.data[idx], ...record };
+    } else if (isNew) {
+      cached.data.push(record);
+    }
+    cached.timestamp = Date.now();
+  }
+
+  private static async getPersistedBackup<T>(tabName: string): Promise<T[]> {
+    try {
+      if (!isAppsScriptConfigured()) return [];
+      const settings = await fetchFromAppsScript('list', { tabName: 'Settings' }).catch(() => []);
+      if (!Array.isArray(settings)) return [];
+      const found = settings.find((s: any) => s.key === `persisted_${tabName}`);
+      if (found && found.value) {
+        const parsed = JSON.parse(found.value);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      // quiet fallback
+    }
+    return [];
+  }
+
+  private static async savePersistedBackup<T extends { id?: string; is_deleted?: any }>(tabName: string, item: T): Promise<void> {
+    try {
+      if (!isAppsScriptConfigured()) return;
+      const settings = await fetchFromAppsScript('list', { tabName: 'Settings' }).catch(() => []);
+      const key = `persisted_${tabName}`;
+      let existingSetting: any = null;
+      let list: any[] = [];
+
+      if (Array.isArray(settings)) {
+        existingSetting = settings.find((s: any) => s.key === key);
+        if (existingSetting && existingSetting.value) {
+          try {
+            list = JSON.parse(existingSetting.value);
+            if (!Array.isArray(list)) list = [];
+          } catch {
+            list = [];
+          }
+        }
+      }
+
+      const idx = list.findIndex(x => x.id === item.id);
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...item };
+      } else {
+        list.push(item);
+      }
+
+      const nowIso = new Date().toISOString();
+      if (existingSetting && existingSetting.id) {
+        await fetchFromAppsScript('update', {
+          tabName: 'Settings',
+          id: existingSetting.id,
+          data: {
+            value: JSON.stringify(list),
+            updated_at: nowIso
+          }
+        });
+      } else {
+        await fetchFromAppsScript('create', {
+          tabName: 'Settings',
+          data: {
+            id: `set_${key}`,
+            key,
+            value: JSON.stringify(list),
+            created_at: nowIso,
+            updated_at: nowIso,
+            created_by: 'system_sync',
+            is_deleted: false
+          }
+        });
+      }
+    } catch (err: any) {
+      console.warn(`[SheetsRepo] Failed to save persisted backup for ${tabName}:`, err?.message);
+    }
+  }
+
+  private static async getBloodGroupsBackup(): Promise<Record<string, string>> {
+    try {
+      if (!isAppsScriptConfigured()) return {};
+      const settings = await fetchFromAppsScript('list', { tabName: 'Settings' }).catch(() => []);
+      if (!Array.isArray(settings)) return {};
+      const found = settings.find((s: any) => s.key === 'employee_blood_groups');
+      if (found && found.value) {
+        return JSON.parse(found.value);
+      }
+    } catch {
+      // quiet fallback
+    }
+    return {};
+  }
+
+  private static async saveBloodGroupBackup(employeeId: string, bloodGroup: string): Promise<void> {
+    try {
+      if (!isAppsScriptConfigured() || !employeeId || !bloodGroup) return;
+      const settings = await fetchFromAppsScript('list', { tabName: 'Settings' }).catch(() => []);
+      let existingSetting: any = null;
+      let map: Record<string, string> = {};
+
+      if (Array.isArray(settings)) {
+        existingSetting = settings.find((s: any) => s.key === 'employee_blood_groups');
+        if (existingSetting && existingSetting.value) {
+          try {
+            map = JSON.parse(existingSetting.value) || {};
+          } catch {
+            map = {};
+          }
+        }
+      }
+
+      map[employeeId] = bloodGroup;
+      const nowIso = new Date().toISOString();
+
+      if (existingSetting && existingSetting.id) {
+        await fetchFromAppsScript('update', {
+          tabName: 'Settings',
+          id: existingSetting.id,
+          data: {
+            value: JSON.stringify(map),
+            updated_at: nowIso
+          }
+        });
+      } else {
+        await fetchFromAppsScript('create', {
+          tabName: 'Settings',
+          data: {
+            id: 'set_employee_blood_groups',
+            key: 'employee_blood_groups',
+            value: JSON.stringify(map),
+            created_at: nowIso,
+            updated_at: nowIso,
+            created_by: 'system_sync',
+            is_deleted: false
+          }
+        });
+      }
+    } catch (err: any) {
+      console.warn('[SheetsRepo] Failed to save blood group backup in Settings:', err?.message);
+    }
+  }
+
   private static parseRow<T>(tabName: string, rowValues: any[], rowIndex: number): T & { _rowIndex: number } {
     const columns = SHEET_COLUMNS[tabName] || [];
     const item: any = { _rowIndex: rowIndex };
@@ -536,23 +687,48 @@ export class SheetsRepo {
     if (isAppsScriptConfigured()) {
       try {
         const rows = await fetchFromAppsScript('list', { tabName });
+        let items: (T & { _rowIndex: number })[] = [];
         if (Array.isArray(rows)) {
-          const items: (T & { _rowIndex: number })[] = rows.map((r, idx) => ({
+          items = rows.map((r, idx) => ({
             ...r,
             _rowIndex: r._rowIndex || idx + 2
           }));
-
-          memoryCache.set(tabName, {
-            data: items,
-            timestamp: now
-          });
-
-          const store = ensureLocalStore();
-          store[tabName] = items;
-          saveLocalStore();
-
-          return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
         }
+
+        // Resilient merge: ExitRequests from Settings backup
+        if (tabName === 'ExitRequests') {
+          const backupItems = await this.getPersistedBackup<T>('ExitRequests');
+          if (backupItems.length > 0) {
+            const map = new Map<string, any>();
+            for (const b of backupItems) { if (b.id) map.set(b.id, b); }
+            for (const r of items) { if (r.id) map.set(r.id, r); }
+            items = Array.from(map.values()) as any;
+          }
+        }
+
+        // Resilient merge: Employee blood groups from Settings backup
+        if (tabName === 'Employees') {
+          const bgMap = await this.getBloodGroupsBackup();
+          items.forEach((emp: any) => {
+            const empKey = emp.id || emp.employee_id;
+            if (empKey && bgMap[empKey] && !emp.blood_group) {
+              emp.blood_group = bgMap[empKey];
+            } else if (emp.employee_id && bgMap[emp.employee_id] && !emp.blood_group) {
+              emp.blood_group = bgMap[emp.employee_id];
+            }
+          });
+        }
+
+        memoryCache.set(tabName, {
+          data: items,
+          timestamp: now
+        });
+
+        const store = ensureLocalStore();
+        store[tabName] = items;
+        saveLocalStore();
+
+        return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
       } catch (err) {
         console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Apps Script. Using backup:`, (err as any)?.message);
         const store = ensureLocalStore();
@@ -638,8 +814,17 @@ export class SheetsRepo {
     if (isAppsScriptConfigured()) {
       try {
         await fetchFromAppsScript('create', { tabName, data: record });
-      } catch (err) {
-        console.warn(`[SheetsRepo] Apps Script write error for ${tabName}:`, (err as any)?.message);
+      } catch (err: any) {
+        console.warn(`[SheetsRepo] Apps Script direct write notice for ${tabName}:`, err?.message);
+        if (tabName === 'ExitRequests') {
+          // Persist directly to Google Sheets Settings backup
+          await this.savePersistedBackup(tabName, record);
+        }
+      }
+
+      if (tabName === 'ExitRequests') {
+        // Also persist to Google Sheets Settings as high-reliability redundancy
+        this.savePersistedBackup(tabName, record).catch(() => {});
       }
     } else if (isGoogleSheetsConfigured()) {
       try {
@@ -667,7 +852,8 @@ export class SheetsRepo {
     store[tabName].push(record);
     saveLocalStore();
 
-    this.invalidateCache(tabName);
+    // Instant cache update for zero-latency response
+    this.updateCacheItem(tabName, record, true);
     return record as T;
   }
 
@@ -680,11 +866,20 @@ export class SheetsRepo {
     const nowIso = new Date().toISOString();
     let updatedItem: any = null;
 
+    // Redundant blood group persistence in Google Sheets Settings
+    if (tabName === 'Employees' && (data as any).blood_group) {
+      this.saveBloodGroupBackup(id, (data as any).blood_group).catch(() => {});
+    }
+
     if (isAppsScriptConfigured()) {
       try {
         await fetchFromAppsScript('update', { tabName, id, data });
       } catch (err) {
         console.warn(`[SheetsRepo] Apps Script update error for ${tabName}:`, (err as any)?.message);
+      }
+
+      if (tabName === 'ExitRequests') {
+        this.savePersistedBackup(tabName, { id, ...data }).catch(() => {});
       }
     } else if (isGoogleSheetsConfigured()) {
       try {
@@ -734,9 +929,12 @@ export class SheetsRepo {
       };
       updatedItem = store[tabName][localIdx];
       saveLocalStore();
+    } else {
+      updatedItem = { id, ...data, updated_at: nowIso };
     }
 
-    this.invalidateCache(tabName);
+    // Instant cache update for zero-latency response
+    this.updateCacheItem(tabName, updatedItem, false);
     return (updatedItem as T) || null;
   }
 
@@ -747,10 +945,14 @@ export class SheetsRepo {
       } catch (err) {
         console.warn(`[SheetsRepo] Apps Script delete error for ${tabName}:`, (err as any)?.message);
       }
+      if (tabName === 'ExitRequests') {
+        this.savePersistedBackup(tabName, { id, is_deleted: true } as any).catch(() => {});
+      }
     }
     const updated = await this.update<T>(tabName, id, { is_deleted: true } as any);
     return !!updated;
   }
+
 
   static async batchGetTabs(tabNames: string[]): Promise<Record<string, any[]>> {
     const result: Record<string, any[]> = {};
