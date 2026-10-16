@@ -94,12 +94,21 @@ export const DashboardPage: React.FC = () => {
             <Clock className="w-4 h-4 text-brand-600" />
             {todayAttendance?.in_time ? (todayAttendance?.out_time ? 'Attendance Completed' : 'Punch OUT') : 'Punch IN (Selfie)'}
           </Link>
-          <Link
-            to="/recruitment/applications?action=add-candidate"
-            className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl text-xs font-black shadow-lg transition active:scale-95"
-          >
-            <UserPlus className="w-4 h-4 text-white" /> Add New Candidate
-          </Link>
+          {isHR ? (
+            <Link
+              to="/recruitment/applications?action=add-candidate"
+              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl text-xs font-black shadow-lg transition active:scale-95"
+            >
+              <UserPlus className="w-4 h-4 text-white" /> Add New Candidate
+            </Link>
+          ) : (
+            <Link
+              to="/leave"
+              className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 bg-brand-800/80 hover:bg-brand-800 text-white rounded-2xl text-xs font-bold transition active:scale-95"
+            >
+              <Calendar className="w-4 h-4" /> Apply Leave
+            </Link>
+          )}
           <Link
             to="/tasks"
             className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-4 py-3 bg-brand-950/40 hover:bg-brand-950/60 text-white rounded-2xl text-xs font-bold transition"

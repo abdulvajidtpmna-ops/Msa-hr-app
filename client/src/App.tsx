@@ -77,7 +77,7 @@ export const App: React.FC = () => {
             <Route
               path="recruitment"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowedRoles={['HR Manager', 'HR Executive']}>
                   <JobsPage />
                 </ProtectedRoute>
               }
@@ -85,7 +85,7 @@ export const App: React.FC = () => {
             <Route
               path="recruitment/applications"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute allowedRoles={['HR Manager', 'HR Executive']}>
                   <ApplicationsPage />
                 </ProtectedRoute>
               }
