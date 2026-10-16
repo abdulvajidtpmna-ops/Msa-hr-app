@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { User, Phone, Mail, MapPin, Shield, FileText, Upload, Save, CheckCircle2 } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Shield, FileText, Upload, Save, CheckCircle2, UserX, AlertCircle, Droplet, Clock } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Employee, EmployeeDoc } from '../../types';
+import { Employee, EmployeeDoc, ExitRequest } from '../../types';
 import { Modal } from '../../components/common/Modal';
+import { ResignationModal } from '../../components/exit/ResignationModal';
 
 export const ProfilePage: React.FC = () => {
   const { user } = useAuth();
@@ -13,11 +14,16 @@ export const ProfilePage: React.FC = () => {
   // Edit fields
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
   const [emergencyName, setEmergencyName] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [emergencyRelation, setEmergencyRelation] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Resignation & Exit state
+  const [showResignationModal, setShowResignationModal] = useState(false);
+  const [myExitRequest, setMyExitRequest] = useState<ExitRequest | null>(null);
 
   // Document upload
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -29,14 +35,23 @@ export const ProfilePage: React.FC = () => {
     if (!user?.id) return;
     setIsLoading(true);
     try {
-      const res = await api.get<{ success: boolean; employee: Employee }>(`/employees/${user.employee_id}`);
-      if (res.success && res.employee) {
-        setProfile(res.employee);
-        setPhone(res.employee.phone || '');
-        setAddress(res.employee.address || '');
-        setEmergencyName(res.employee.emergency_name || '');
-        setEmergencyPhone(res.employee.emergency_phone || '');
-        setEmergencyRelation(res.employee.emergency_relation || '');
+      const [empRes, exitRes] = await Promise.all([
+        api.get<{ success: boolean; employee: Employee }>(`/employees/${user.employee_id}`),
+        api.get<{ success: boolean; request: ExitRequest | null }>('/exit/my-resignation').catch(() => ({ success: false, request: null }))
+      ]);
+
+      if (empRes.success && empRes.employee) {
+        setProfile(empRes.employee);
+        setPhone(empRes.employee.phone || '');
+        setAddress(empRes.employee.address || '');
+        setBloodGroup(empRes.employee.blood_group || '');
+        setEmergencyName(empRes.employee.emergency_name || '');
+        setEmergencyPhone(empRes.employee.emergency_phone || '');
+        setEmergencyRelation(empRes.employee.emergency_relation || '');
+      }
+
+      if (exitRes.success) {
+        setMyExitRequest(exitRes.request);
       }
     } catch (e) {}
     finally {
@@ -58,6 +73,7 @@ export const ProfilePage: React.FC = () => {
       const res = await api.put(`/employees/${profile.id}`, {
         phone,
         address,
+        blood_group: bloodGroup,
         emergency_name: emergencyName,
         emergency_phone: emergencyPhone,
         emergency_relation: emergencyRelation
@@ -65,6 +81,7 @@ export const ProfilePage: React.FC = () => {
       if (res.success) {
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
+        fetchProfile();
       }
     } catch (err: any) {
       alert(err.message || 'Failed to update profile');
@@ -112,9 +129,17 @@ export const ProfilePage: React.FC = () => {
                 {profile?.designation} • {profile?.department}
               </p>
             </div>
-            <span className="px-3 py-1 bg-brand-50 text-brand-800 rounded-full text-xs font-bold border border-brand-200">
-              Employee ID: {profile?.employee_id || user?.employee_id}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-3 py-1 bg-brand-50 text-brand-800 rounded-full text-xs font-bold border border-brand-200">
+                Employee ID: {profile?.employee_id || user?.employee_id}
+              </span>
+              {profile?.blood_group && (
+                <span className="px-3 py-1 bg-rose-50 text-rose-700 rounded-full text-xs font-bold border border-rose-200 flex items-center gap-1">
+                  <Droplet className="w-3 h-3 text-rose-500 fill-current" />
+                  Blood Group: {profile.blood_group}
+                </span>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap justify-center sm:justify-start gap-4 mt-4 text-xs text-slate-500 font-medium">
@@ -146,6 +171,20 @@ export const ProfilePage: React.FC = () => {
                 onChange={e => setPhone(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200"
               />
+            </div>
+
+            <div>
+              <label className="block font-bold text-slate-700 mb-1">Blood Group</label>
+              <select
+                value={bloodGroup}
+                onChange={e => setBloodGroup(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white"
+              >
+                <option value="">-- Select Blood Group --</option>
+                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Other'].map(bg => (
+                  <option key={bg} value={bg}>{bg}</option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -250,6 +289,65 @@ export const ProfilePage: React.FC = () => {
         </div>
       </div>
 
+      {/* Employee Resignation & Offboarding Card */}
+      <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b pb-4 border-slate-100">
+          <div>
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <UserX className="w-4 h-4 text-rose-600" />
+              Resignation & Exit Management
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Initiate formal separation, track notice period, handover clearances, and relieving status.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowResignationModal(true)}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs ${
+              myExitRequest && !['Withdrawn', 'Rejected'].includes(String(myExitRequest.status))
+                ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                : 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200'
+            }`}
+          >
+            {myExitRequest && !['Withdrawn', 'Rejected'].includes(String(myExitRequest.status)) ? (
+              <>
+                <Clock className="w-3.5 h-3.5" /> Track Resignation ({myExitRequest.status})
+              </>
+            ) : (
+              <>
+                <FileText className="w-3.5 h-3.5" /> Submit Resignation Request
+              </>
+            )}
+          </button>
+        </div>
+
+        {myExitRequest && !['Withdrawn', 'Rejected'].includes(String(myExitRequest.status)) ? (
+          <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 text-xs flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-slate-500">
+                Current Status: <strong className="text-slate-800">{myExitRequest.status}</strong> • Resignation Date: <strong>{myExitRequest.resignation_date}</strong>
+              </p>
+              <p className="text-slate-500 mt-0.5">
+                Last Working Day: <strong className="text-slate-800">{myExitRequest.approved_last_working_day || myExitRequest.proposed_last_working_day}</strong> • Reason: <strong>{myExitRequest.reason}</strong>
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowResignationModal(true)}
+              className="text-xs font-bold text-brand-700 underline"
+            >
+              View Full Progress & NOC Status
+            </button>
+          </div>
+        ) : (
+          <p className="text-xs text-slate-500">
+            Standard notice period at Mastered Skill Academy is 30 days. You can initiate a resignation request here or via the Resignation button in the top navigation bar at any time.
+          </p>
+        )}
+      </div>
+
       {/* Upload Document Modal */}
       <Modal isOpen={showUploadModal} onClose={() => setShowUploadModal(false)} title="Upload Personal Document">
         <form onSubmit={handleUploadDoc} className="space-y-4">
@@ -289,6 +387,13 @@ export const ProfilePage: React.FC = () => {
           </button>
         </form>
       </Modal>
+
+      {/* Resignation Modal */}
+      <ResignationModal
+        isOpen={showResignationModal}
+        onClose={() => setShowResignationModal(false)}
+        onSubmitted={fetchProfile}
+      />
     </div>
   );
 };

@@ -17,15 +17,21 @@ import {
   User as UserIcon,
   ShieldCheck,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  UserX,
+  FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PwaInstallBanner } from '../common/PwaInstallBanner';
+import { ResignationModal } from '../exit/ResignationModal';
+import { ExitManagementModal } from '../exit/ExitManagementModal';
 
 export const AppLayout: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showResignationModal, setShowResignationModal] = useState(false);
+  const [showExitManagementModal, setShowExitManagementModal] = useState(false);
 
   const isHRManager = user?.role === 'HR Manager';
   const isHRExecutive = user?.role === 'HR Executive';
@@ -62,6 +68,8 @@ export const AppLayout: React.FC = () => {
     { label: 'Recruitment', path: '/recruitment', icon: Briefcase, show: true },
     { label: 'Candidate Pipeline', path: '/recruitment/applications', icon: UserCheck, show: true },
     { label: 'Staff Directory', path: '/employees', icon: Users, show: isHR },
+    { label: 'Exit Management', path: '#exit', onClick: () => setShowExitManagementModal(true), icon: UserX, show: isHR },
+    { label: 'Resignation & Exit', path: '#resignation', onClick: () => setShowResignationModal(true), icon: FileText, show: !isHR },
     { label: 'Payroll & Slips', path: '/payroll', icon: DollarSign, show: true },
     { label: 'Reports', path: '/reports', icon: BarChart3, show: isHR },
     { label: 'Settings', path: '/settings', icon: SettingsIcon, show: isHRManager },
@@ -99,8 +107,32 @@ export const AppLayout: React.FC = () => {
             </div>
           </div>
 
-          {/* User Profile info */}
-          <div className="flex items-center gap-3">
+          {/* User Profile & Global Exit/Resignation Action */}
+          <div className="flex items-center gap-2.5">
+            {isHR ? (
+              <button
+                type="button"
+                onClick={() => setShowExitManagementModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 rounded-xl text-xs font-bold transition shadow-xs"
+                title="Exit & Offboarding Management"
+              >
+                <UserX className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Exit Management</span>
+                <span className="sm:hidden">Exit</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowResignationModal(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition shadow-xs"
+                title="Employee Resignation Portal"
+              >
+                <FileText className="w-3.5 h-3.5 text-rose-600" />
+                <span className="hidden sm:inline">Resignation</span>
+                <span className="sm:hidden">Resign</span>
+              </button>
+            )}
+
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-900">{user?.name}</p>
               <div className="flex items-center justify-end gap-1">
@@ -150,6 +182,19 @@ export const AppLayout: React.FC = () => {
               .filter(item => item.show)
               .map(item => {
                 const Icon = item.icon;
+                if ((item as any).onClick) {
+                  return (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={(item as any).onClick}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition text-slate-600 hover:bg-slate-100 hover:text-slate-900 text-left"
+                    >
+                      <Icon className="w-4 h-4 flex-shrink-0 text-rose-600" />
+                      <span>{item.label}</span>
+                    </button>
+                  );
+                }
                 return (
                   <NavLink
                     key={item.path}
@@ -218,6 +263,25 @@ export const AppLayout: React.FC = () => {
                   .filter(item => item.show)
                   .map(item => {
                     const Icon = item.icon;
+                    if ((item as any).onClick) {
+                      return (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => {
+                            setIsMobileMenuOpen(false);
+                            (item as any).onClick();
+                          }}
+                          className="w-full flex items-center justify-between px-4 py-3 rounded-2xl text-sm font-semibold transition text-slate-600 hover:bg-slate-100 text-left"
+                        >
+                          <div className="flex items-center gap-3">
+                            <Icon className="w-4 h-4 flex-shrink-0 text-rose-600" />
+                            <span>{item.label}</span>
+                          </div>
+                          <ChevronRight className="w-4 h-4 opacity-50" />
+                        </button>
+                      );
+                    }
                     return (
                       <NavLink
                         key={item.path}
@@ -326,6 +390,18 @@ export const AppLayout: React.FC = () => {
           <span className="text-[10px]">More</span>
         </button>
       </div>
+
+      {/* Global Modals for Resignation and Exit Management accessible on EACH page */}
+      <ResignationModal
+        isOpen={showResignationModal}
+        onClose={() => setShowResignationModal(false)}
+      />
+
+      <ExitManagementModal
+        isOpen={showExitManagementModal}
+        onClose={() => setShowExitManagementModal(false)}
+        currentUserRole={user?.role}
+      />
     </div>
   );
 };

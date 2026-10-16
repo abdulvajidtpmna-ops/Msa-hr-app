@@ -28,13 +28,16 @@ import {
   ShieldCheck,
   UserCheck,
   Palmtree,
-  Wallet
+  Wallet,
+  Droplet
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Employee, EmployeeDoc } from '../../types';
 import { Modal } from '../../components/common/Modal';
 import { EmptyState } from '../../components/common/EmptyState';
+import { ExitManagementModal } from '../../components/exit/ExitManagementModal';
+import { ResignationModal } from '../../components/exit/ResignationModal';
 
 export const EmployeesPage: React.FC = () => {
   const { user } = useAuth();
@@ -65,11 +68,16 @@ export const EmployeesPage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
   const [designation, setDesignation] = useState('');
   const [department, setDepartment] = useState('Academics');
   const [role, setRole] = useState<'Employee' | 'HR Executive'>('Employee');
   const [joiningDate, setJoiningDate] = useState(new Date().toISOString().split('T')[0]);
   const [isCreating, setIsCreating] = useState(false);
+
+  // Global Exit & Resignation Management Modals
+  const [showExitManagementModal, setShowExitManagementModal] = useState(false);
+  const [showResignationModal, setShowResignationModal] = useState(false);
 
   // Exit Modal (HR Manager only)
   const [showExitModal, setShowExitModal] = useState(false);
@@ -119,6 +127,7 @@ export const EmployeesPage: React.FC = () => {
       phone: emp.phone || '',
       dob: emp.dob ? emp.dob.split('T')[0] : '',
       gender: emp.gender || 'Other',
+      blood_group: emp.blood_group || '',
       address: emp.address || '',
       emergency_name: emp.emergency_name || '',
       emergency_relation: emp.emergency_relation || '',
@@ -173,6 +182,7 @@ export const EmployeesPage: React.FC = () => {
         full_name: fullName,
         phone,
         email,
+        blood_group: bloodGroup,
         designation,
         department,
         role,
@@ -183,6 +193,7 @@ export const EmployeesPage: React.FC = () => {
         setFullName('');
         setPhone('');
         setEmail('');
+        setBloodGroup('');
         setDesignation('');
         fetchEmployees();
       }
@@ -262,15 +273,25 @@ export const EmployeesPage: React.FC = () => {
           <p className="text-xs text-slate-500">Master database of all academy staff members, emergency profiles & documents</p>
         </div>
 
-        {isHRManager && (
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md transition"
+            onClick={() => setShowExitManagementModal(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition shadow-xs"
           >
-            <Plus className="w-4 h-4" /> Add Employee Manually
+            <UserX className="w-4 h-4 text-rose-600" /> Exit & Resignations
           </button>
-        )}
+
+          {isHRManager && (
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold shadow-md transition"
+            >
+              <Plus className="w-4 h-4" /> Add Employee Manually
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -563,7 +584,7 @@ export const EmployeesPage: React.FC = () => {
             {/* TAB 2: PERSONAL & EMERGENCY */}
             {profileTab === 'personal' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Date of Birth</span>
                     <p className="font-bold text-slate-900 mt-1">{selectedEmployee.dob ? selectedEmployee.dob.split('T')[0] : 'Not specified'}</p>
@@ -571,6 +592,12 @@ export const EmployeesPage: React.FC = () => {
                   <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Gender</span>
                     <p className="font-bold text-slate-900 mt-1">{selectedEmployee.gender || 'Not specified'}</p>
+                  </div>
+                  <div className="p-3.5 bg-rose-50/50 rounded-2xl border border-rose-100">
+                    <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1">
+                      <Droplet className="w-3 h-3 fill-current" /> Blood Group
+                    </span>
+                    <p className="font-black text-rose-700 mt-1">{selectedEmployee.blood_group || 'Not specified'}</p>
                   </div>
                   <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-100">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Primary Phone</span>
@@ -969,7 +996,7 @@ export const EmployeesPage: React.FC = () => {
           {/* EDIT SECTION 2: PERSONAL & EMERGENCY */}
           {editTab === 'personal' && (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Primary Phone *</label>
                   <input
@@ -999,6 +1026,19 @@ export const EmployeesPage: React.FC = () => {
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
                     <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Blood Group</label>
+                  <select
+                    value={editForm.blood_group || ''}
+                    onChange={e => setEditForm({ ...editForm, blood_group: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs font-semibold bg-white"
+                  >
+                    <option value="">-- Blood Group --</option>
+                    {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Other'].map(bg => (
+                      <option key={bg} value={bg}>{bg}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -1236,14 +1276,28 @@ export const EmployeesPage: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Joining Date</label>
-              <input
-                type="date"
-                value={joiningDate}
-                onChange={e => setJoiningDate(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"
-              />
+              <label className="block text-xs font-bold text-slate-700 mb-1">Blood Group</label>
+              <select
+                value={bloodGroup}
+                onChange={e => setBloodGroup(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm bg-white"
+              >
+                <option value="">-- Blood Group --</option>
+                {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-', 'Other'].map(bg => (
+                  <option key={bg} value={bg}>{bg}</option>
+                ))}
+              </select>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">Joining Date</label>
+            <input
+              type="date"
+              value={joiningDate}
+              onChange={e => setJoiningDate(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm"
+            />
           </div>
 
           <button
@@ -1335,6 +1389,20 @@ export const EmployeesPage: React.FC = () => {
           </button>
         </form>
       </Modal>
+
+      {/* Exit & Resignation Management Modals */}
+      <ExitManagementModal
+        isOpen={showExitManagementModal}
+        onClose={() => setShowExitManagementModal(false)}
+        currentUserRole={user?.role}
+        onRefresh={fetchEmployees}
+      />
+
+      <ResignationModal
+        isOpen={showResignationModal}
+        onClose={() => setShowResignationModal(false)}
+        onSubmitted={fetchEmployees}
+      />
     </div>
   );
 };

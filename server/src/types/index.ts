@@ -27,6 +27,7 @@ export interface Employee extends BaseEntity {
   email: string;
   dob: string;
   gender: string;
+  blood_group?: string;
   address: string;
   emergency_name: string;
   emergency_relation: string;
@@ -382,4 +383,50 @@ export interface AuditLog extends BaseEntity {
   after_json?: string;
   ip?: string;
   timestamp: string;
+}
+
+export type ExitRequestStatus =
+  | 'Pending Review'
+  | 'Notice Period Active'
+  | 'Clearance In Progress'
+  | 'Completed / Exited'
+  | 'Rejected'
+  | 'Withdrawn';
+
+export interface ExitRequest extends BaseEntity {
+  employee_id: string;
+  employee_name: string;
+  department: string;
+  designation: string;
+  request_type: 'Resignation' | 'Termination' | 'Mutual Separation' | 'Contract End' | string;
+  resignation_date: string;
+  notice_period_days: number | string;
+  proposed_last_working_day: string;
+  approved_last_working_day?: string;
+  reason: string;
+  reason_details?: string;
+  status: ExitRequestStatus;
+  reviewer_id?: string;
+  review_notes?: string;
+  dept_clearance: boolean | string;
+  dept_clearance_by?: string;
+  dept_clearance_notes?: string;
+  it_clearance: boolean | string;
+  it_clearance_by?: string;
+  it_clearance_notes?: string;
+  finance_clearance: boolean | string;
+  finance_clearance_by?: string;
+  finance_clearance_notes?: string;
+  admin_clearance: boolean | string;
+  admin_clearance_by?: string;
+  admin_clearance_notes?: string;
+  exit_interview_status: 'Pending' | 'Conducted' | 'Waived' | string;
+  feedback_rating?: number | string;
+  rehire_eligible?: boolean | string;
+  interview_notes?: string;
+  fnf_status: 'Pending' | 'In Progress' | 'Settled' | string;
+  fnf_amount?: number | string;
+  fnf_settlement_date?: string;
+  fnf_remarks?: string;
+  relieving_letter_issued?: boolean | string;
 }

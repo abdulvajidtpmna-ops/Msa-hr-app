@@ -193,6 +193,7 @@ router.post('/', requireRole('HR Manager'), async (req: Request, res: Response) 
       email: body.email,
       dob: body.dob || '',
       gender: body.gender || 'Other',
+      blood_group: body.blood_group || '',
       address: body.address || '',
       emergency_name: body.emergency_name || '',
       emergency_relation: body.emergency_relation || '',
@@ -248,6 +249,7 @@ router.put('/:id', async (req: Request, res: Response) => {
     if (isSelf || isManager || isExec) {
       if (body.phone) updatePayload.phone = body.phone;
       if (body.address) updatePayload.address = body.address;
+      if (body.blood_group !== undefined) updatePayload.blood_group = body.blood_group;
       if (body.emergency_name) updatePayload.emergency_name = body.emergency_name;
       if (body.emergency_relation) updatePayload.emergency_relation = body.emergency_relation;
       if (body.emergency_phone) updatePayload.emergency_phone = body.emergency_phone;
