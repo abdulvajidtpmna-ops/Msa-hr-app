@@ -52,10 +52,10 @@ router.post('/login', loginLimiter, async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    // Update last_login
-    await SheetsRepo.update<User>('Users', user.id, {
+    // Update last_login asynchronously in background
+    SheetsRepo.update<User>('Users', user.id, {
       last_login: new Date().toISOString()
-    });
+    }).catch(e => console.warn('[Auth] Background last_login update notice:', e?.message));
 
     // Find Employee record
     const employees = await SheetsRepo.list<Employee>('Employees');

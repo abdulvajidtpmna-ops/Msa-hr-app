@@ -11,23 +11,28 @@ export class AuditService {
     afterState?: any,
     ip?: string
   ): Promise<void> {
-    try {
-      await SheetsRepo.create<AuditLog>(
-        'AuditLog',
-        {
-          actor_id: actorId || 'system',
-          action,
-          entity,
-          entity_id: entityId,
-          before_json: beforeState ? JSON.stringify(beforeState) : '',
-          after_json: afterState ? JSON.stringify(afterState) : '',
-          ip: ip || '',
-          timestamp: new Date().toISOString()
-        },
-        actorId || 'system'
-      );
-    } catch (err) {
-      console.error('[AuditService] Failed to record audit log:', err);
-    }
+    // Non-blocking background execution: Never stall the user response
+    setImmediate(async () => {
+      try {
+        await SheetsRepo.create<AuditLog>(
+          'AuditLog',
+          {
+            actor_id: actorId || 'system',
+            action,
+            entity,
+            entity_id: entityId,
+            before_json: beforeState ? JSON.stringify(beforeState) : '',
+            after_json: afterState ? JSON.stringify(afterState) : '',
+            ip: ip || '',
+            timestamp: new Date().toISOString()
+          },
+          actorId || 'system'
+        );
+      } catch (err) {
+        console.warn('[AuditService] Background audit log write notice:', (err as any)?.message);
+      }
+    });
+    return Promise.resolve();
   }
 }
+

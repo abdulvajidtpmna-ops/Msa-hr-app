@@ -15,7 +15,8 @@ import {
   MapPin,
   Clock,
   Sparkles,
-  Upload
+  Upload,
+  UserPlus
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Job, CustomFieldConfig, JobCriteria } from '../../types';
@@ -160,10 +161,10 @@ export const JobsPage: React.FC = () => {
             <Users className="w-4 h-4" /> View Candidate Pipeline
           </Link>
           <Link
-            to="/recruitment/applications?action=upload-resume"
+            to="/recruitment/applications?action=add-candidate"
             className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-md transition flex items-center gap-1.5"
           >
-            <Upload className="w-4 h-4 text-emerald-400" /> Direct Resume Upload
+            <UserPlus className="w-4 h-4 text-emerald-400" /> Add New Candidate
           </Link>
           <button
             type="button"

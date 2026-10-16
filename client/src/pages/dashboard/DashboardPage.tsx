@@ -15,7 +15,8 @@ import {
   UserX,
   FileCheck2,
   Sparkles,
-  Upload
+  Upload,
+  UserPlus
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -94,10 +95,10 @@ export const DashboardPage: React.FC = () => {
             {todayAttendance?.in_time ? (todayAttendance?.out_time ? 'Attendance Completed' : 'Punch OUT') : 'Punch IN (Selfie)'}
           </Link>
           <Link
-            to="/recruitment/applications?action=upload-resume"
+            to="/recruitment/applications?action=add-candidate"
             className="flex-1 md:flex-initial inline-flex items-center justify-center gap-2 px-5 py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl text-xs font-black shadow-lg transition active:scale-95"
           >
-            <Upload className="w-4 h-4 text-white" /> Direct CV Upload
+            <UserPlus className="w-4 h-4 text-white" /> Add New Candidate
           </Link>
           <Link
             to="/tasks"

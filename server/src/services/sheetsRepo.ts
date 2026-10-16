@@ -284,7 +284,8 @@ interface CacheEntry<T> {
 }
 
 const memoryCache: Map<string, CacheEntry<any>> = new Map();
-const CACHE_TTL_MS = 20 * 1000;
+const inFlightRequests: Map<string, Promise<any>> = new Map();
+const CACHE_TTL_MS = 30 * 1000;
 
 export function isGoogleSheetsConfigured(): boolean {
   return !!(
@@ -684,103 +685,120 @@ export class SheetsRepo {
       return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
     }
 
-    if (isAppsScriptConfigured()) {
-      try {
-        const rows = await fetchFromAppsScript('list', { tabName });
-        let items: (T & { _rowIndex: number })[] = [];
-        if (Array.isArray(rows)) {
-          items = rows.map((r, idx) => ({
-            ...r,
-            _rowIndex: r._rowIndex || idx + 2
-          }));
-        }
+    // In-flight request deduplication: Multiple components share a single remote request
+    if (inFlightRequests.has(tabName)) {
+      const inFlightItems = await inFlightRequests.get(tabName);
+      return includeDeleted ? inFlightItems : (inFlightItems || []).filter((i: any) => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    }
 
-        // Resilient merge: ExitRequests from Settings backup
-        if (tabName === 'ExitRequests') {
-          const backupItems = await this.getPersistedBackup<T>('ExitRequests');
-          if (backupItems.length > 0) {
-            const map = new Map<string, any>();
-            for (const b of backupItems) { if (b.id) map.set(b.id, b); }
-            for (const r of items) { if (r.id) map.set(r.id, r); }
-            items = Array.from(map.values()) as any;
+    const fetchPromise = (async (): Promise<(T & { _rowIndex: number })[]> => {
+      if (isAppsScriptConfigured()) {
+        try {
+          const rows = await fetchFromAppsScript('list', { tabName });
+          let items: (T & { _rowIndex: number })[] = [];
+          if (Array.isArray(rows)) {
+            items = rows.map((r, idx) => ({
+              ...r,
+              _rowIndex: r._rowIndex || idx + 2
+            }));
           }
-        }
 
-        // Resilient merge: Employee blood groups from Settings backup
-        if (tabName === 'Employees') {
-          const bgMap = await this.getBloodGroupsBackup();
-          items.forEach((emp: any) => {
-            const empKey = emp.id || emp.employee_id;
-            if (empKey && bgMap[empKey] && !emp.blood_group) {
-              emp.blood_group = bgMap[empKey];
-            } else if (emp.employee_id && bgMap[emp.employee_id] && !emp.blood_group) {
-              emp.blood_group = bgMap[emp.employee_id];
+          // Resilient merge: ExitRequests from Settings backup
+          if (tabName === 'ExitRequests') {
+            const backupItems = await this.getPersistedBackup<T>('ExitRequests');
+            if (backupItems.length > 0) {
+              const map = new Map<string, any>();
+              for (const b of backupItems) { if (b.id) map.set(b.id, b); }
+              for (const r of items) { if (r.id) map.set(r.id, r); }
+              items = Array.from(map.values()) as any;
             }
+          }
+
+          // Resilient merge: Employee blood groups from Settings backup
+          if (tabName === 'Employees') {
+            const bgMap = await this.getBloodGroupsBackup();
+            items.forEach((emp: any) => {
+              const empKey = emp.id || emp.employee_id;
+              if (empKey && bgMap[empKey] && !emp.blood_group) {
+                emp.blood_group = bgMap[empKey];
+              } else if (emp.employee_id && bgMap[emp.employee_id] && !emp.blood_group) {
+                emp.blood_group = bgMap[emp.employee_id];
+              }
+            });
+          }
+
+          memoryCache.set(tabName, {
+            data: items,
+            timestamp: Date.now()
           });
+
+          const store = ensureLocalStore();
+          store[tabName] = items;
+          saveLocalStore();
+
+          return items;
+        } catch (err) {
+          console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Apps Script. Using backup:`, (err as any)?.message);
+          const store = ensureLocalStore();
+          const items = (store[tabName] || []) as (T & { _rowIndex: number })[];
+          return items;
         }
+      }
+
+      if (!isGoogleSheetsConfigured()) {
+        const store = ensureLocalStore();
+        const items = (store[tabName] || []) as (T & { _rowIndex: number })[];
+        return items;
+      }
+
+      try {
+        const sheets = getSheetsClient();
+        const spreadsheetId = config.googleSpreadsheetId;
+
+        const response = await withRetry(() =>
+          sheets.spreadsheets.values.get({
+            spreadsheetId,
+            range: `${tabName}!A2:ZZ`
+          })
+        );
+
+        const rows = response.data.values || [];
+        const items: (T & { _rowIndex: number })[] = [];
+
+        rows.forEach((row, idx) => {
+          if (!row || row.length === 0 || !row[0]) return;
+          const item = this.parseRow<T>(tabName, row, idx + 2);
+          items.push(item);
+        });
 
         memoryCache.set(tabName, {
           data: items,
-          timestamp: now
+          timestamp: Date.now()
         });
 
+        // Mirror to localStore
         const store = ensureLocalStore();
         store[tabName] = items;
         saveLocalStore();
 
-        return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+        return items;
       } catch (err) {
-        console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Apps Script. Using backup:`, (err as any)?.message);
+        console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Google Sheets. Using backup:`, (err as any)?.message);
         const store = ensureLocalStore();
-        const items = (store[tabName] || []) as T[];
-        return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+        const items = (store[tabName] || []) as (T & { _rowIndex: number })[];
+        return items;
       }
-    }
+    })();
 
-    if (!isGoogleSheetsConfigured()) {
-      const store = ensureLocalStore();
-      const items = (store[tabName] || []) as T[];
-      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
-    }
-
+    inFlightRequests.set(tabName, fetchPromise);
     try {
-      const sheets = getSheetsClient();
-      const spreadsheetId = config.googleSpreadsheetId;
-
-      const response = await withRetry(() =>
-        sheets.spreadsheets.values.get({
-          spreadsheetId,
-          range: `${tabName}!A2:ZZ`
-        })
-      );
-
-      const rows = response.data.values || [];
-      const items: (T & { _rowIndex: number })[] = [];
-
-      rows.forEach((row, idx) => {
-        if (!row || row.length === 0 || !row[0]) return;
-        const item = this.parseRow<T>(tabName, row, idx + 2);
-        items.push(item);
-      });
-
-      memoryCache.set(tabName, {
-        data: items,
-        timestamp: now
-      });
-
-      // Mirror to localStore
-      const store = ensureLocalStore();
-      store[tabName] = items;
-      saveLocalStore();
-
+      const items = await fetchPromise;
       return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
-    } catch (err) {
-      console.warn(`[SheetsRepo] Failed to fetch tab ${tabName} from Google Sheets. Using backup:`, (err as any)?.message);
-      const store = ensureLocalStore();
-      const items = (store[tabName] || []) as T[];
-      return includeDeleted ? items : items.filter(i => !i.is_deleted || String(i.is_deleted).toLowerCase() === 'false');
+    } finally {
+      inFlightRequests.delete(tabName);
     }
   }
+
 
   static async getById<T extends BaseEntity>(tabName: string, id: string): Promise<T | null> {
     const list = await this.list<T>(tabName);
@@ -978,6 +996,11 @@ export class SheetsRepo {
       result[tab] = await this.list(tab);
     }
     return result;
+  }
+
+  static clearCache(): void {
+    memoryCache.clear();
+    inFlightRequests.clear();
   }
 }
 

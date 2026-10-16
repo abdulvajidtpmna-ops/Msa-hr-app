@@ -427,17 +427,47 @@ export async function autoAddJoinedCandidateToEmployees(
 }
 
 /**
- * Creates candidate application directly from uploaded resume with zero form filling required
+ * Creates candidate application directly with optional uploaded resume or manual entry
  */
 export async function createApplicationFromDirectResume(
-  file: Express.Multer.File,
+  file: Express.Multer.File | undefined,
   jobId: string | undefined,
   overrides: Record<string, any>,
   creatorEmployeeId: string,
   reqIp?: string
 ) {
   const jobs = await SheetsRepo.list<Job>('Jobs');
-  let job = jobs.find(j => j.id === jobId || j.slug === jobId);
+  const targetJobRole = (overrides.job_role || overrides.job_title || overrides.designation || '').trim();
+  
+  let job: Job | undefined;
+  if (jobId) {
+    job = jobs.find(j => j.id === jobId || j.slug === jobId || j.title.toLowerCase() === jobId.toLowerCase());
+  }
+
+  if (!job && targetJobRole) {
+    // Find matching job by title or auto-create one
+    job = jobs.find(j => j.title.toLowerCase() === targetJobRole.toLowerCase());
+    if (!job) {
+      const generatedSlug = targetJobRole.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `job-${Math.floor(100 + Math.random() * 900)}`;
+      job = await SheetsRepo.create<Job>('Jobs', {
+        title: targetJobRole,
+        slug: `${generatedSlug}-${Math.floor(100 + Math.random() * 900)}`,
+        department: overrides.department || 'Operations',
+        location: overrides.location || 'Kerala, India',
+        type: 'Full-time',
+        vacancies: 1,
+        description: `Direct role for ${targetJobRole}`,
+        responsibilities: `Key responsibilities for ${targetJobRole}`,
+        qualification: overrides.qualification || 'Graduate',
+        min_experience: Number(overrides.experience_years) || 0,
+        required_skills: overrides.skills || 'Domain Knowledge',
+        preferred_skills: '',
+        status: 'Open',
+        threshold: 60
+      }, creatorEmployeeId);
+    }
+  }
+
   if (!job) {
     job = jobs.find(j => j.status === 'Open') || jobs[0];
   }
@@ -461,48 +491,66 @@ export async function createApplicationFromDirectResume(
     }, creatorEmployeeId);
   }
 
-  // 1. Auto-extract from resume
-  const parsed: ParsedResumeData = parseResume(file.buffer, file.originalname);
+  // 1. Auto-extract from resume if file provided
+  const parsed: ParsedResumeData = file
+    ? parseResume(file.buffer, file.originalname)
+    : {
+        full_name: '',
+        email: '',
+        phone: '',
+        skills: '',
+        experience_years: 0,
+        qualification: '',
+        specialization: '',
+        designation: '',
+        department: overrides.department || 'Operations',
+        current_salary: 0,
+        expected_salary: 0,
+        location: '',
+        raw_text_preview: ''
+      };
 
   // 2. Generate Reference Number
   const refNo = `APP-${Math.floor(1000 + Math.random() * 9000)}`;
 
-  // 3. Reconcile fields with zero form filling required
-  const fullName = (overrides.full_name || parsed.full_name || `Applicant ${refNo}`).trim();
+  // 3. Reconcile fields with manual entries or parsed data
+  const fullName = (overrides.full_name || overrides.candidate_name || parsed.full_name || `Candidate ${refNo}`).trim();
   const phone = (overrides.phone || parsed.phone || '+91 9000000000').trim();
   const email = (overrides.email || parsed.email || `candidate.${refNo.toLowerCase()}@masteredskill.com`).trim().toLowerCase();
   const qualification = (overrides.qualification || parsed.qualification || job.qualification || 'Graduate').trim();
   const specialization = (overrides.specialization || parsed.specialization || '').trim();
   const experienceYears = Number(overrides.experience_years ?? parsed.experience_years ?? 0);
-  const currentEmployer = (overrides.current_employer || overrides.designation || parsed.designation || 'Previous Organization').trim();
+  const currentEmployer = (overrides.current_employer || targetJobRole || overrides.designation || parsed.designation || 'Previous Organization').trim();
   const skills = (overrides.skills || parsed.skills || job.required_skills || 'General Skills').trim();
   const currentSalary = Number(overrides.current_salary ?? parsed.current_salary ?? 0);
   const expectedSalary = Number(
     overrides.expected_salary ?? parsed.expected_salary ?? (job.salary_range ? parseInt(job.salary_range.replace(/\D/g, '')) : 25000) ?? 0
   );
   const location = (overrides.location || parsed.location || job.location || 'Kerala, India').trim();
-  const initialStatus = (overrides.status || 'Applied') as ApplicationStatus;
+  const initialStatus = (overrides.status || overrides.initial_status || 'Applied') as ApplicationStatus;
 
-  // 4. Save Resume to Drive / local storage
+  // 4. Save Resume to Drive / local storage if provided
   let resumeDriveId = '';
-  try {
-    const candidateFolderId = await DriveStorage.resolveFolderPath([
-      'Mastered Skill Academy HR',
-      'Recruitment',
-      job.slug || job.id,
-      `${refNo} - ${fullName}`
-    ]);
+  if (file) {
+    try {
+      const candidateFolderId = await DriveStorage.resolveFolderPath([
+        'Mastered Skill Academy HR',
+        'Recruitment',
+        job.slug || job.id,
+        `${refNo} - ${fullName}`
+      ]);
 
-    const resumeUpload = await DriveStorage.uploadFile(
-      `${refNo}_Resume_${file.originalname}`,
-      file.mimetype || 'application/pdf',
-      file.buffer,
-      candidateFolderId
-    );
-    resumeDriveId = resumeUpload.fileId;
-  } catch (driveErr) {
-    console.warn('Drive upload fallback:', driveErr);
-    resumeDriveId = `drive_mock_${uuidv4().slice(0, 8)}`;
+      const resumeUpload = await DriveStorage.uploadFile(
+        `${refNo}_Resume_${file.originalname}`,
+        file.mimetype || 'application/pdf',
+        file.buffer,
+        candidateFolderId
+      );
+      resumeDriveId = resumeUpload.fileId;
+    } catch (driveErr) {
+      console.warn('Drive upload fallback:', driveErr);
+      resumeDriveId = `drive_mock_${uuidv4().slice(0, 8)}`;
+    }
   }
 
   // 5. Score candidate against job criteria
@@ -537,7 +585,7 @@ export async function createApplicationFromDirectResume(
     current_salary: currentSalary,
     expected_salary: expectedSalary,
     notice_period: overrides.notice_period || 0,
-    why_join: overrides.why_join || 'Direct resume application without manual form filling',
+    why_join: overrides.why_join || overrides.hr_notes || 'Added directly via Add New Candidate',
     custom_answers_json: overrides.custom_answers || '{}',
     resume_drive_id: resumeDriveId,
     photo_drive_id: '',
@@ -562,13 +610,13 @@ export async function createApplicationFromDirectResume(
     application_id: createdApp.id,
     from_status: 'None',
     to_status: initialStatus,
-    remark: `Candidate created via direct resume upload (${file.originalname})`,
+    remark: `Candidate created via Add New Candidate${file ? ` with CV (${file.originalname})` : ''}`,
     changed_by: creatorEmployeeId
   });
 
   await AuditService.log(
     creatorEmployeeId,
-    'DIRECT_RESUME_APPLICATION',
+    'ADD_NEW_CANDIDATE',
     'Applications',
     createdApp.id,
     undefined,
@@ -581,7 +629,7 @@ export async function createApplicationFromDirectResume(
   if (initialStatus === 'Joined') {
     joinedResult = await autoAddJoinedCandidateToEmployees(createdApp.id, {
       role: overrides.role || 'Employee',
-      designation: overrides.designation || currentEmployer,
+      designation: overrides.designation || targetJobRole || currentEmployer,
       department: overrides.department || job.department,
       joining_date: overrides.joining_date,
       temporary_password: overrides.temporary_password,
@@ -751,14 +799,11 @@ router.put('/jobs/:id', async (req: Request, res: Response) => {
 });
 
 /**
- * Direct Resume Upload / Zero Form-Filling candidate creation (HR Manager & HR Executive)
+ * Add New Candidate / Direct Resume Upload (HR Manager & HR Executive)
+ * Supports manual candidate input, optional CV upload, custom job roles, and direct pipeline placement.
  */
-router.post('/applications/direct-resume', upload.single('resume'), async (req: Request, res: Response) => {
+const handleAddCandidate = async (req: Request, res: Response) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ success: false, message: 'Resume document (PDF/DOC/TXT) is required' });
-    }
-
     const { jobId, ...overrides } = req.body;
     const result = await createApplicationFromDirectResume(
       req.file,
@@ -770,17 +815,20 @@ router.post('/applications/direct-resume', upload.single('resume'), async (req: 
 
     return res.status(201).json({
       success: true,
-      message: `Candidate ${result.application.full_name} created successfully from resume!`,
+      message: `Candidate ${result.application.full_name} created successfully!`,
       application: result.application,
       job: result.job,
       parsed: result.parsed,
       joinedResult: result.joinedResult
     });
   } catch (err: any) {
-    console.error('Direct resume upload error:', err);
-    return res.status(500).json({ success: false, message: err.message || 'Failed to process resume' });
+    console.error('Candidate creation error:', err);
+    return res.status(500).json({ success: false, message: err.message || 'Failed to add candidate' });
   }
-});
+};
+
+router.post('/applications/add-candidate', upload.single('resume'), handleAddCandidate);
+router.post('/applications/direct-resume', upload.single('resume'), handleAddCandidate);
 
 /**
  * Real-time resume parsing preview without saving
