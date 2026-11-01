@@ -16,11 +16,13 @@ import {
   FileCheck2,
   Sparkles,
   Upload,
-  UserPlus
+  UserPlus,
+  Target,
+  Award
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { Attendance, Task, LeaveBalance } from '../../types';
+import { Attendance, Task, LeaveBalance, PerformanceDashboardStats, KPI } from '../../types';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -28,6 +30,8 @@ export const DashboardPage: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [hrStats, setHrStats] = useState<any>(null);
+  const [perfStats, setPerfStats] = useState<PerformanceDashboardStats | null>(null);
+  const [perfKpis, setPerfKpis] = useState<KPI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const isHR = user?.role === 'HR Manager' || user?.role === 'HR Executive';
@@ -35,15 +39,19 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     const loadDashboardData = async () => {
       try {
-        const [attRes, tasksRes, leaveRes] = await Promise.all([
+        const [attRes, tasksRes, leaveRes, perfRes, kpisRes] = await Promise.all([
           api.get<{ success: boolean; attendance: Attendance | null }>('/attendance/today'),
           api.get<{ success: boolean; tasks: Task[] }>('/tasks/my-tasks'),
-          api.get<{ success: boolean; balances: LeaveBalance[] }>('/leave/my-balances')
+          api.get<{ success: boolean; balances: LeaveBalance[] }>('/leave/my-balances'),
+          api.get<{ success: boolean; stats: PerformanceDashboardStats }>('/performance/dashboard').catch(() => ({ success: false })),
+          api.get<{ success: boolean; kpis: KPI[] }>('/performance/kpis').catch(() => ({ success: false }))
         ]);
 
         if (attRes.success) setTodayAttendance(attRes.attendance);
         if (tasksRes.success) setTasks(tasksRes.tasks);
         if (leaveRes.success) setLeaveBalances(leaveRes.balances);
+        if (perfRes.success && (perfRes as any).stats) setPerfStats((perfRes as any).stats);
+        if (kpisRes.success && (kpisRes as any).kpis) setPerfKpis((kpisRes as any).kpis);
 
         if (isHR) {
           const [liveAttRes, jobsRes, appsRes] = await Promise.all([
@@ -275,6 +283,85 @@ export const DashboardPage: React.FC = () => {
             className="mt-4 w-full py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold text-center block transition"
           >
             Apply for Leave
+          </Link>
+        </div>
+      </div>
+
+      {/* Performance & Appraisal Highlights Widget */}
+      <div className="bg-gradient-to-r from-slate-900 via-brand-950 to-slate-900 rounded-3xl p-6 sm:p-7 text-white shadow-xl shadow-brand-950/10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+        <div className="space-y-2 max-w-xl">
+          <div className="flex items-center gap-2">
+            <span className="px-3 py-1 bg-brand-500/20 text-brand-300 rounded-full text-[11px] font-bold border border-brand-500/30 inline-flex items-center gap-1.5">
+              <Target className="w-3.5 h-3.5" /> Performance & Appraisal Hub
+            </span>
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline">• Cycle 2026</span>
+          </div>
+          <h3 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            {isHR ? 'Organizational KRA & KPI Performance' : 'My Key Result Areas & Performance Goals'}
+          </h3>
+          <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+            {isHR
+              ? 'Monitor department benchmarks, review employee self-evaluations, and score strategic milestones.'
+              : 'Track target achievement, update self-appraisal ratings and evidence, and view manager feedback.'}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-4 w-full lg:w-auto justify-start lg:justify-end">
+          {isHR ? (
+            <>
+              <div className="px-5 py-3.5 bg-white/10 rounded-2xl border border-white/10 text-center min-w-[110px] backdrop-blur-sm">
+                <p className="text-2xl font-black text-white">{perfStats?.totalKras ?? 0}</p>
+                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mt-0.5">KRAs Defined</p>
+              </div>
+
+              <div className="px-5 py-3.5 bg-white/10 rounded-2xl border border-white/10 text-center min-w-[110px] backdrop-blur-sm">
+                <p className="text-2xl font-black text-brand-300">
+                  {perfStats?.avgScore ? `${perfStats.avgScore}%` : '--'}
+                </p>
+                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mt-0.5">Org Avg Score</p>
+              </div>
+
+              <div className="px-5 py-3.5 bg-white/10 rounded-2xl border border-white/10 text-center min-w-[110px] backdrop-blur-sm">
+                <p className="text-2xl font-black text-emerald-400">{perfStats?.completionRate ?? 0}%</p>
+                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mt-0.5">Completion Rate</p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="px-5 py-3.5 bg-white/10 rounded-2xl border border-white/10 text-center min-w-[110px] backdrop-blur-sm">
+                <p className="text-2xl font-black text-white">{perfKpis.length}</p>
+                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mt-0.5">Assigned KPIs</p>
+              </div>
+
+              <div className="px-5 py-3.5 bg-white/10 rounded-2xl border border-white/10 text-center min-w-[110px] backdrop-blur-sm">
+                <p className="text-2xl font-black text-brand-300">
+                  {perfKpis.filter(k => k.evaluation_status === 'Evaluated' && k.score !== undefined).length > 0
+                    ? `${Math.round(
+                        perfKpis
+                          .filter(k => k.evaluation_status === 'Evaluated' && k.score !== undefined)
+                          .reduce((sum, k) => sum + Number(k.score || 0), 0) /
+                          perfKpis.filter(k => k.evaluation_status === 'Evaluated' && k.score !== undefined).length
+                      )}%`
+                    : 'Pending'}
+                </p>
+                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mt-0.5">My Score</p>
+              </div>
+
+              <div className="px-5 py-3.5 bg-white/10 rounded-2xl border border-white/10 text-center min-w-[110px] backdrop-blur-sm">
+                <p className="text-2xl font-black text-emerald-400">
+                  {perfKpis.filter(k => k.status === 'Achieved').length} / {perfKpis.length}
+                </p>
+                <p className="text-[10px] uppercase font-bold text-slate-300 tracking-wider mt-0.5">Achieved</p>
+              </div>
+            </>
+          )}
+
+          <Link
+            to="/performance"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-500 text-white rounded-2xl text-xs font-black shadow-lg transition active:scale-95"
+          >
+            <span>{isHR ? 'Open Performance Hub' : 'View My Scorecard'}</span>
+            <ChevronRight className="w-4 h-4" />
           </Link>
         </div>
       </div>

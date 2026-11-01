@@ -18,6 +18,7 @@ import reportRoutes from './routes/reportRoutes';
 import fileRoutes from './routes/fileRoutes';
 import auditRoutes from './routes/auditRoutes';
 import exitRoutes from './routes/exitRoutes';
+import performanceRoutes from './routes/performanceRoutes';
 
 const app: Express = express();
 
@@ -63,6 +64,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/exit', exitRoutes);
+app.use('/api/performance', performanceRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req: Request, res: Response) => {

@@ -39,12 +39,23 @@ export interface PayrollCalculationResult {
   }[];
 }
 
+export interface StatutoryOverrides {
+  pf_cap_enabled?: boolean | string;
+  pf_override_type?: 'default' | 'fixed' | 'percent' | 'exempt' | string;
+  pf_override_value?: number | string;
+  esi_override_type?: 'default' | 'fixed' | 'percent' | 'exempt' | string;
+  esi_override_value?: number | string;
+  pt_override_type?: 'default' | 'fixed' | 'exempt' | string;
+  pt_override_value?: number | string;
+}
+
 export function calculateEmployeePayroll(
   month: string, // "YYYY-MM"
   structure: SalaryStructure,
   attendance: AttendanceSummary,
   transactions: Transaction[] = [],
-  dayCalculationBasis: 'calendar_days' | 'fixed_30' | 'working_days' = 'calendar_days'
+  dayCalculationBasis: 'calendar_days' | 'fixed_30' | 'working_days' = 'calendar_days',
+  overrides?: StatutoryOverrides
 ): PayrollCalculationResult {
   const basic = Number(structure.basic) || 0;
   const hra = Number(structure.hra) || 0;
@@ -169,22 +180,70 @@ export function calculateEmployeePayroll(
     }
   }
 
-  // Statutory Deductions
-  // PF: 12% of Basic (capped at statutory wage ceiling if configured)
+  // Statutory Deductions with Wage Ceiling & Configurable Overrides
+  const rawDeductions = fixedDeductions as Record<string, any>;
   const pfEnabled = structure.pf_enabled === true || structure.pf_enabled === 'true';
-  const pfDeduction = pfEnabled ? Math.round(basic * 0.12) : 0;
+  const pfCapEnabled = (overrides?.pf_cap_enabled !== undefined)
+    ? (overrides.pf_cap_enabled === true || overrides.pf_cap_enabled === 'true')
+    : (structure.pf_cap_enabled === true || structure.pf_cap_enabled === 'true' || rawDeductions.pf_cap_enabled === true || rawDeductions.pf_cap_enabled === 'true');
 
-  // ESI: 0.75% of Gross if Gross <= 21000
+  const pfOverrideType = (overrides?.pf_override_type || structure.pf_override_type || rawDeductions.pf_override_type || 'default') as string;
+  const pfOverrideValue = overrides?.pf_override_value !== undefined ? overrides.pf_override_value : (structure.pf_override_value !== undefined ? structure.pf_override_value : rawDeductions.pf_override_value);
+
+  let pfDeduction = 0;
+  if (pfOverrideType === 'exempt') {
+    pfDeduction = 0;
+  } else if (pfOverrideType === 'fixed') {
+    pfDeduction = Math.max(0, Math.round(Number(pfOverrideValue) || 0));
+  } else if (pfOverrideType === 'percent') {
+    const pct = (Number(pfOverrideValue) || 0) / 100;
+    const base = pfCapEnabled ? Math.min(basic, 15000) : basic;
+    pfDeduction = Math.round(base * pct);
+  } else {
+    // default statutory: 12% of basic (capped at 15000 wage ceiling if pfCapEnabled)
+    if (pfEnabled) {
+      const base = pfCapEnabled ? Math.min(basic, 15000) : basic;
+      pfDeduction = Math.round(base * 0.12);
+    }
+  }
+
+  // ESI: 0.75% of Gross if Gross <= 21000, with configurable overrides
   const esiEnabled = structure.esi_enabled === true || structure.esi_enabled === 'true';
-  const esiDeduction = esiEnabled && grossBase <= 21000 ? Math.round(grossBase * 0.0075) : 0;
+  const esiOverrideType = (overrides?.esi_override_type || structure.esi_override_type || rawDeductions.esi_override_type || 'default') as string;
+  const esiOverrideValue = overrides?.esi_override_value !== undefined ? overrides.esi_override_value : (structure.esi_override_value !== undefined ? structure.esi_override_value : rawDeductions.esi_override_value);
 
-  // Professional Tax (Kerala standard / typical slab)
+  let esiDeduction = 0;
+  if (esiOverrideType === 'exempt') {
+    esiDeduction = 0;
+  } else if (esiOverrideType === 'fixed') {
+    esiDeduction = Math.max(0, Math.round(Number(esiOverrideValue) || 0));
+  } else if (esiOverrideType === 'percent') {
+    const pct = (Number(esiOverrideValue) || 0) / 100;
+    esiDeduction = Math.round(grossBase * pct);
+  } else {
+    // default statutory: 0.75% of Gross if Gross <= 21000
+    if (esiEnabled && grossBase <= 21000) {
+      esiDeduction = Math.round(grossBase * 0.0075);
+    }
+  }
+
+  // Professional Tax (Kerala standard slab / configurable overrides)
   const ptEnabled = structure.pt_enabled === true || structure.pt_enabled === 'true';
+  const ptOverrideType = (overrides?.pt_override_type || structure.pt_override_type || rawDeductions.pt_override_type || 'default') as string;
+  const ptOverrideValue = overrides?.pt_override_value !== undefined ? overrides.pt_override_value : (structure.pt_override_value !== undefined ? structure.pt_override_value : rawDeductions.pt_override_value);
+
   let ptDeduction = 0;
-  if (ptEnabled) {
-    if (grossBase > 20000) ptDeduction = 200;
-    else if (grossBase > 15000) ptDeduction = 150;
-    else if (grossBase > 10000) ptDeduction = 100;
+  if (ptOverrideType === 'exempt') {
+    ptDeduction = 0;
+  } else if (ptOverrideType === 'fixed') {
+    ptDeduction = Math.max(0, Math.round(Number(ptOverrideValue) || 0));
+  } else {
+    // default statutory: Kerala standard slab
+    if (ptEnabled) {
+      if (grossBase > 20000) ptDeduction = 200;
+      else if (grossBase > 15000) ptDeduction = 150;
+      else if (grossBase > 10000) ptDeduction = 100;
+    }
   }
 
   // Compile Earnings list
@@ -239,8 +298,13 @@ export function calculateEmployeePayroll(
     deductions.push({ name: 'Fines / Penalties', amount: fineTotal });
   }
 
+  const metadataKeys = new Set([
+    'pf_cap_enabled', 'pf_override_type', 'pf_override_value',
+    'esi_override_type', 'esi_override_value',
+    'pt_override_type', 'pt_override_value'
+  ]);
   Object.entries(fixedDeductions).forEach(([key, val]) => {
-    if (Number(val) > 0) {
+    if (!metadataKeys.has(key) && !key.startsWith('_') && Number(val) > 0) {
       deductions.push({ name: key, amount: Number(val) });
     }
   });

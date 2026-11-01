@@ -20,7 +20,7 @@
  * =========================================================================================
  */
 
-// 23 Data Tables for Complete MSA HR Platform
+// 26 Data Tables for Complete MSA HR Platform
 var SHEET_COLUMNS = {
   Users: ['employee_id', 'email', 'phone', 'password_hash', 'role', 'must_change_password', 'is_active', 'last_login', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Employees: ['employee_id', 'full_name', 'photo_url', 'phone', 'email', 'dob', 'gender', 'address', 'emergency_name', 'emergency_relation', 'emergency_phone', 'designation', 'department', 'role', 'employment_type', 'joining_date', 'reporting_manager_id', 'work_location', 'probation_end', 'status', 'pan', 'aadhaar_enc', 'bank_name', 'account_no_enc', 'ifsc', 'uan', 'esi_no', 'exit_date', 'exit_reason', 'drive_folder_id', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted', 'blood_group'],
@@ -45,7 +45,9 @@ var SHEET_COLUMNS = {
   TaskUpdates: ['task_id', 'employee_id', 'update_type', 'status_from', 'status_to', 'remark', 'evidence_json', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   ExitRequests: ['employee_id', 'employee_name', 'department', 'designation', 'request_type', 'resignation_date', 'notice_period_days', 'proposed_last_working_day', 'approved_last_working_day', 'reason', 'reason_details', 'status', 'reviewer_id', 'review_notes', 'dept_clearance', 'dept_clearance_by', 'dept_clearance_notes', 'it_clearance', 'it_clearance_by', 'it_clearance_notes', 'finance_clearance', 'finance_clearance_by', 'finance_clearance_notes', 'admin_clearance', 'admin_clearance_by', 'admin_clearance_notes', 'exit_interview_status', 'feedback_rating', 'rehire_eligible', 'interview_notes', 'fnf_status', 'fnf_amount', 'fnf_settlement_date', 'fnf_remarks', 'relieving_letter_issued', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Settings: ['key', 'value', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
-  AuditLog: ['actor_id', 'action', 'entity', 'entity_id', 'before_json', 'after_json', 'ip', 'timestamp', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted']
+  AuditLog: ['actor_id', 'action', 'entity', 'entity_id', 'before_json', 'after_json', 'ip', 'timestamp', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
+  KRAs: ['title', 'description', 'department', 'designation', 'assigned_to', 'assigned_by', 'period', 'weightage', 'status', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
+  KPIs: ['kra_id', 'employee_id', 'title', 'description', 'target_value', 'current_value', 'unit', 'weightage', 'start_date', 'due_date', 'status', 'self_rating', 'self_comments', 'manager_rating', 'manager_comments', 'score', 'evaluation_status', 'evaluated_by', 'evaluated_at', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted']
 };
 
 /**
@@ -54,7 +56,7 @@ var SHEET_COLUMNS = {
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('🚀 MSA HR System')
-    .addItem('Initialize All 23 Database Tabs', 'setupAllTabs')
+    .addItem('Initialize All Database Tabs', 'setupAllTabs')
     .addItem('Seed Master User Accounts', 'seedMasterUsers')
     .addItem('Setup Google Drive Folders', 'setupDriveFolders')
     .addSeparator()
@@ -97,7 +99,7 @@ function setupAllTabs() {
   seedMasterUsers();
   setupDriveFolders();
   
-  return { success: true, message: 'All 23 MSA HR tabs initialized successfully.' };
+  return { success: true, message: 'All ' + tabs.length + ' MSA HR tabs initialized successfully.' };
 }
 
 /**

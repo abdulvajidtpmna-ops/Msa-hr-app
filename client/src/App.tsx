@@ -20,6 +20,7 @@ import { PayrollPage } from './pages/payroll/PayrollPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { SettingsPage } from './pages/settings/SettingsPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
+import { PerformancePage } from './pages/performance/PerformancePage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({
   children,
@@ -71,6 +72,14 @@ export const App: React.FC = () => {
             <Route path="tasks" element={<TasksPage />} />
             <Route path="leave" element={<LeavePage />} />
             <Route path="payroll" element={<PayrollPage />} />
+            <Route
+              path="performance"
+              element={
+                <ProtectedRoute allowedRoles={['HR Manager', 'HR Executive', 'Employee']}>
+                  <PerformancePage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="profile" element={<ProfilePage />} />
 
             {/* HR & Recruitment Operations */}

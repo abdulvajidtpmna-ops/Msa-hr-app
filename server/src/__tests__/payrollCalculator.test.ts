@@ -88,4 +88,101 @@ describe('Payroll Calculation Engine', () => {
     expect(numberToIndianWords(1500)).toBe('Rupees One Thousand Five Hundred Only');
     expect(numberToIndianWords(125450)).toBe('Rupees One Lakh Twenty Five Thousand Four Hundred and Fifty Only');
   });
+
+  describe('Statutory Overrides and PF Wage Ceiling', () => {
+    test('caps PF at statutory ceiling ₹15,000 basic when pf_cap_enabled is true', () => {
+      // Basic is 20000, but capped at 15000 -> 15000 * 0.12 = 1800
+      const cappedStructure: SalaryStructure = {
+        ...structure,
+        pf_cap_enabled: true
+      };
+      const result = calculateEmployeePayroll('2026-03', cappedStructure, attendance, []);
+      const pfItem = result.deductions.find(d => d.name === 'Provident Fund (PF)');
+      expect(pfItem?.amount).toBe(1800);
+    });
+
+    test('does not exceed basic for PF calculation when basic is below ceiling', () => {
+      // Basic is 12000 -> 12000 * 0.12 = 1440
+      const belowCapStructure: SalaryStructure = {
+        ...structure,
+        basic: 12000,
+        pf_cap_enabled: true
+      };
+      const result = calculateEmployeePayroll('2026-03', belowCapStructure, attendance, []);
+      const pfItem = result.deductions.find(d => d.name === 'Provident Fund (PF)');
+      expect(pfItem?.amount).toBe(1440);
+    });
+
+    test('supports PF overrides (fixed, percent, exempt)', () => {
+      // Fixed override: 2000
+      const fixedResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        pf_override_type: 'fixed',
+        pf_override_value: 2000
+      }, attendance, []);
+      expect(fixedResult.deductions.find(d => d.name === 'Provident Fund (PF)')?.amount).toBe(2000);
+
+      // Exempt override: 0
+      const exemptResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        pf_override_type: 'exempt'
+      }, attendance, []);
+      expect(exemptResult.deductions.find(d => d.name === 'Provident Fund (PF)')).toBeUndefined();
+
+      // Percent override: 10% of 20000 = 2000
+      const percentResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        pf_override_type: 'percent',
+        pf_override_value: 10
+      }, attendance, []);
+      expect(percentResult.deductions.find(d => d.name === 'Provident Fund (PF)')?.amount).toBe(2000);
+    });
+
+    test('supports ESI overrides (fixed, exempt, percent)', () => {
+      // ESI fixed override: 150
+      const fixedResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        esi_enabled: true,
+        esi_override_type: 'fixed',
+        esi_override_value: 150
+      }, attendance, []);
+      expect(fixedResult.deductions.find(d => d.name.includes('ESI'))?.amount).toBe(150);
+
+      // ESI exempt override: 0
+      const exemptResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        esi_enabled: true,
+        esi_override_type: 'exempt'
+      }, attendance, []);
+      expect(exemptResult.deductions.find(d => d.name.includes('ESI'))).toBeUndefined();
+    });
+
+    test('supports PT overrides (fixed, exempt)', () => {
+      // PT fixed: 300
+      const fixedResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        pt_override_type: 'fixed',
+        pt_override_value: 300
+      }, attendance, []);
+      expect(fixedResult.deductions.find(d => d.name.includes('PT'))?.amount).toBe(300);
+
+      // PT exempt: 0
+      const exemptResult = calculateEmployeePayroll('2026-03', {
+        ...structure,
+        pt_override_type: 'exempt'
+      }, attendance, []);
+      expect(exemptResult.deductions.find(d => d.name.includes('PT'))).toBeUndefined();
+    });
+
+    test('supports overrides passed via StatutoryOverrides argument', () => {
+      const result = calculateEmployeePayroll('2026-03', structure, attendance, [], 'calendar_days', {
+        pf_cap_enabled: true,
+        pt_override_type: 'fixed',
+        pt_override_value: 175
+      });
+      expect(result.deductions.find(d => d.name === 'Provident Fund (PF)')?.amount).toBe(1800);
+      expect(result.deductions.find(d => d.name.includes('PT'))?.amount).toBe(175);
+    });
+  });
 });
+

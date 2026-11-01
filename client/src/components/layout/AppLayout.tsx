@@ -18,7 +18,8 @@ import {
   ShieldCheck,
   ChevronRight,
   RefreshCw,
-  UserX
+  UserX,
+  Target
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { PwaInstallBanner } from '../common/PwaInstallBanner';
@@ -61,6 +62,7 @@ export const AppLayout: React.FC = () => {
     { label: 'Home', path: '/dashboard', icon: Home, show: true },
     { label: 'Attendance', path: '/attendance', icon: Clock, show: true },
     { label: 'Daily Tasks', path: '/tasks', icon: CheckSquare, show: true },
+    { label: 'Performance', path: '/performance', icon: Target, show: true },
     { label: 'Leave & Offs', path: '/leave', icon: Calendar, show: true },
     { label: 'Recruitment', path: '/recruitment', icon: Briefcase, show: isHR },
     { label: 'Candidate Pipeline', path: '/recruitment/applications', icon: UserCheck, show: isHR },
@@ -358,7 +360,7 @@ export const AppLayout: React.FC = () => {
           <NavLink
             to="/recruitment/applications"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition ${
+              `flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition ${
                 isActive ? 'text-brand-700 font-bold' : 'text-slate-500'
               }`
             }
@@ -370,7 +372,7 @@ export const AppLayout: React.FC = () => {
           <NavLink
             to="/leave"
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition ${
+              `flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition ${
                 isActive ? 'text-brand-700 font-bold' : 'text-slate-500'
               }`
             }
@@ -380,10 +382,22 @@ export const AppLayout: React.FC = () => {
           </NavLink>
         )}
 
+        <NavLink
+          to="/performance"
+          className={({ isActive }) =>
+            `flex flex-col items-center gap-1 py-1 px-2 rounded-xl transition ${
+              isActive ? 'text-brand-700 font-bold' : 'text-slate-500'
+            }`
+          }
+        >
+          <Target className="w-5 h-5" />
+          <span className="text-[10px]">Goals</span>
+        </NavLink>
+
         <button
           type="button"
           onClick={() => setIsMobileMenuOpen(true)}
-          className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-slate-500"
+          className="flex flex-col items-center gap-1 py-1 px-2 rounded-xl text-slate-500"
         >
           <Menu className="w-5 h-5" />
           <span className="text-[10px]">More</span>

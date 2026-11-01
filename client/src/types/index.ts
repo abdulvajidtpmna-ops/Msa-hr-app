@@ -57,6 +57,13 @@ export interface Employee {
     esi_enabled?: boolean;
     pt_enabled?: boolean;
     overtime_rate?: number;
+    pf_cap_enabled?: boolean;
+    pf_override_type?: 'default' | 'fixed' | 'percent' | 'exempt';
+    pf_override_value?: number;
+    esi_override_type?: 'default' | 'fixed' | 'percent' | 'exempt';
+    esi_override_value?: number;
+    pt_override_type?: 'default' | 'fixed' | 'exempt';
+    pt_override_value?: number;
   };
   leave_balances?: {
     name: string;
@@ -320,6 +327,13 @@ export interface SalaryStructure {
   esi_enabled: boolean;
   pt_enabled: boolean;
   overtime_rate?: number;
+  pf_cap_enabled?: boolean;
+  pf_override_type?: 'default' | 'fixed' | 'percent' | 'exempt';
+  pf_override_value?: number;
+  esi_override_type?: 'default' | 'fixed' | 'percent' | 'exempt';
+  esi_override_value?: number;
+  pt_override_type?: 'default' | 'fixed' | 'exempt';
+  pt_override_value?: number;
 }
 
 export interface Transaction {
@@ -402,4 +416,74 @@ export interface ExitRequest {
   relieving_letter_issued?: boolean | string;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface KRA {
+  id: string;
+  title: string;
+  description?: string;
+  department: string;
+  designation?: string;
+  assigned_to: string; // 'ALL' or employee_id
+  assigned_by: string; // employee_id
+  period: string; // e.g. "Q1 2026", "2025-2026"
+  weightage: number;
+  status: 'Active' | 'Draft' | 'Under Review' | 'Completed' | 'Archived' | string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  is_deleted?: boolean;
+}
+export type Kra = KRA;
+
+export interface KPI {
+  id: string;
+  kra_id: string;
+  employee_id: string;
+  title: string;
+  description?: string;
+  target_value: number | string;
+  current_value: number | string;
+  unit: string;
+  weightage: number;
+  start_date?: string;
+  due_date?: string;
+  status: 'Pending' | 'In Progress' | 'Achieved' | 'Partially Achieved' | 'Missed' | string;
+  self_rating?: number;
+  self_comments?: string;
+  manager_rating?: number;
+  manager_comments?: string;
+  score?: number;
+  evaluation_status: 'Not Started' | 'Self Submitted' | 'Evaluated' | 'Approved' | string;
+  evaluated_by?: string;
+  evaluated_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  created_by?: string;
+  is_deleted?: boolean;
+  kra_title?: string;
+  employee_name?: string;
+  department?: string;
+}
+export type Kpi = KPI;
+
+export interface PerformanceDashboardStats {
+  totalKras: number;
+  totalKpis: number;
+  avgScore: number;
+  completionRate: number;
+  statusDistribution: Record<string, number>;
+  departmentBreakdown: {
+    department: string;
+    totalKras: number;
+    totalKpis: number;
+    avgScore: number;
+  }[];
+  topPerformers?: {
+    employee_id: string;
+    employee_name: string;
+    department: string;
+    score: number;
+    kpiCount: number;
+  }[];
 }

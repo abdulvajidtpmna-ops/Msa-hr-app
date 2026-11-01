@@ -297,6 +297,13 @@ export interface SalaryStructure extends BaseEntity {
   esi_enabled: boolean | string;
   pt_enabled: boolean | string;
   overtime_rate?: number | string;
+  pf_cap_enabled?: boolean | string;
+  pf_override_type?: 'default' | 'fixed' | 'percent' | 'exempt' | string;
+  pf_override_value?: number | string;
+  esi_override_type?: 'default' | 'fixed' | 'percent' | 'exempt' | string;
+  esi_override_value?: number | string;
+  pt_override_type?: 'default' | 'fixed' | 'exempt' | string;
+  pt_override_value?: number | string;
 }
 
 export interface Transaction extends BaseEntity {
@@ -429,4 +436,64 @@ export interface ExitRequest extends BaseEntity {
   fnf_settlement_date?: string;
   fnf_remarks?: string;
   relieving_letter_issued?: boolean | string;
+}
+
+export interface Kra extends BaseEntity {
+  title: string;
+  description?: string;
+  department: string;
+  designation?: string;
+  assigned_to: string; // 'ALL' or employee_id
+  assigned_by: string; // employee_id
+  period: string; // e.g. "Q1 2026", "2025-2026"
+  weightage: number | string;
+  status: 'Active' | 'Draft' | 'Under Review' | 'Completed' | 'Archived' | string;
+}
+export type KRA = Kra;
+
+export interface Kpi extends BaseEntity {
+  kra_id: string;
+  employee_id: string;
+  title: string;
+  description?: string;
+  target_value: number | string;
+  current_value: number | string;
+  unit: string;
+  weightage: number | string;
+  start_date?: string;
+  due_date?: string;
+  status: 'Pending' | 'In Progress' | 'Achieved' | 'Partially Achieved' | 'Missed' | string;
+  self_rating?: number | string;
+  self_comments?: string;
+  manager_rating?: number | string;
+  manager_comments?: string;
+  score?: number | string;
+  evaluation_status: 'Not Started' | 'Self Submitted' | 'Evaluated' | 'Approved' | string;
+  evaluated_by?: string;
+  evaluated_at?: string;
+  kra_title?: string;
+  employee_name?: string;
+  department?: string;
+}
+export type KPI = Kpi;
+
+export interface PerformanceDashboardStats {
+  totalKras: number;
+  totalKpis: number;
+  avgScore: number;
+  completionRate: number;
+  statusDistribution: Record<string, number>;
+  departmentBreakdown: {
+    department: string;
+    totalKras: number;
+    totalKpis: number;
+    avgScore: number;
+  }[];
+  topPerformers?: {
+    employee_id: string;
+    employee_name: string;
+    department: string;
+    score: number;
+    kpiCount: number;
+  }[];
 }

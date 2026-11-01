@@ -30,7 +30,9 @@ export const SHEET_COLUMNS: Record<string, string[]> = {
   TaskUpdates: ['task_id', 'employee_id', 'update_type', 'status_from', 'status_to', 'remark', 'evidence_json', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   ExitRequests: ['employee_id', 'employee_name', 'department', 'designation', 'request_type', 'resignation_date', 'notice_period_days', 'proposed_last_working_day', 'approved_last_working_day', 'reason', 'reason_details', 'status', 'reviewer_id', 'review_notes', 'dept_clearance', 'dept_clearance_by', 'dept_clearance_notes', 'it_clearance', 'it_clearance_by', 'it_clearance_notes', 'finance_clearance', 'finance_clearance_by', 'finance_clearance_notes', 'admin_clearance', 'admin_clearance_by', 'admin_clearance_notes', 'exit_interview_status', 'feedback_rating', 'rehire_eligible', 'interview_notes', 'fnf_status', 'fnf_amount', 'fnf_settlement_date', 'fnf_remarks', 'relieving_letter_issued', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
   Settings: ['key', 'value', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
-  AuditLog: ['actor_id', 'action', 'entity', 'entity_id', 'before_json', 'after_json', 'ip', 'timestamp', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted']
+  AuditLog: ['actor_id', 'action', 'entity', 'entity_id', 'before_json', 'after_json', 'ip', 'timestamp', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
+  KRAs: ['title', 'description', 'department', 'designation', 'assigned_to', 'assigned_by', 'period', 'weightage', 'status', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted'],
+  KPIs: ['kra_id', 'employee_id', 'title', 'description', 'target_value', 'current_value', 'unit', 'weightage', 'start_date', 'due_date', 'status', 'self_rating', 'self_comments', 'manager_rating', 'manager_comments', 'score', 'evaluation_status', 'evaluated_by', 'evaluated_at', 'id', 'created_at', 'updated_at', 'created_by', 'is_deleted']
 };
 
 import os from 'os';
@@ -253,8 +255,14 @@ function ensureLocalStore(): LocalDB {
       const content = fs.readFileSync(LOCAL_DB_FILE, 'utf-8');
       const parsed = JSON.parse(content);
       if (parsed && Array.isArray(parsed.Users) && parsed.Users.length > 0) {
-        localStore = parsed;
-        return localStore!;
+        const store: LocalDB = parsed;
+        for (const tab of Object.keys(SHEET_COLUMNS)) {
+          if (!Array.isArray(store[tab])) {
+            store[tab] = [];
+          }
+        }
+        localStore = store;
+        return localStore;
       }
     }
   } catch (e) {
@@ -803,6 +811,10 @@ export class SheetsRepo {
   static async getById<T extends BaseEntity>(tabName: string, id: string): Promise<T | null> {
     const list = await this.list<T>(tabName);
     return list.find(item => item.id === id) || null;
+  }
+
+  static async findById<T extends BaseEntity>(tabName: string, id: string): Promise<T | null> {
+    return this.getById<T>(tabName, id);
   }
 
   static async find<T extends BaseEntity>(
